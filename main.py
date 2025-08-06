@@ -28,7 +28,7 @@ if uploaded_file:
 # Output
 st.markdown("### Recommended Adjustments")
 st.write("- RF Rebound: +1 click")
-st.write("- RR Ride Height: +0.05"")
+st.write("- RR Ride Height: +0.05\"")
 st.write("- Crossweight: Adjust to 49.7%")
 
 # Show Editables

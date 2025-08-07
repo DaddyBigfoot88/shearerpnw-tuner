@@ -3,63 +3,111 @@ import json
 import os
 
 # Access control
-if st.text_input("Enter Access Code") != "tune2025":
+if st.text_input("Enter Access Code") != "Shearer":
     st.stop()
 
 st.title("ShearerPNW Easy Tuner")
-st.subheader("NASCAR + GT3 Setup Assistant")
+st.subheader("NASCAR Next Gen Manual Setup Input")
 
-car = st.selectbox("Select Car", [
-    "ARCA Menards", "NASCAR Next Gen", "NASCAR Trucks", "NASCAR Xfinity", "Ford Mustang GT3"
-])
+# Car locked to Next Gen for now
+car = "NASCAR Next Gen"
 
+# Track selection
 track = st.selectbox("Select Track", [
-    "Atlanta Motor Speedway", "Auto Club Speedway", "Bristol Motor Speedway", "Bristol Motor Speedway - Dirt",
-    "Canadian Tire Motorsport Park", "Charlotte Motor Speedway", "Charlotte Roval", "Chicagoland Speedway",
-    "Circuit of the Americas", "Darlington Raceway", "Daytona International Speedway", "Daytona Road Course",
-    "Dover Motor Speedway", "Eldora Speedway", "Gateway (WWT Raceway)", "Homestead-Miami Speedway",
-    "Indianapolis Motor Speedway", "Indianapolis Road Course", "Iowa Speedway", "Kansas Speedway",
-    "Kentucky Speedway", "Las Vegas Motor Speedway", "Los Angeles Memorial Coliseum", "Lucas Oil Raceway (IRP)",
-    "Martinsville Speedway", "Michigan International Speedway", "Milwaukee Mile", "Nashville Fairgrounds Speedway",
-    "Nashville Superspeedway", "New Hampshire Motor Speedway", "North Wilkesboro Speedway", "Phoenix Raceway",
-    "Pocono Raceway", "Portland International Raceway", "Richmond Raceway", "Road America", "Rockingham Speedway",
-    "Sonoma Raceway", "South Boston Speedway", "Talladega Superspeedway", "Texas Motor Speedway",
-    "Watkins Glen International", "World Wide Technology Raceway"
+    "Atlanta Motor Speedway", "Auto Club Speedway", "Bristol Motor Speedway",
+    "Charlotte Motor Speedway", "Charlotte Roval", "Darlington Raceway",
+    "Daytona International Speedway", "Dover Motor Speedway", "Gateway (WWT Raceway)",
+    "Homestead-Miami Speedway", "Iowa Speedway", "Kansas Speedway",
+    "Las Vegas Motor Speedway", "Martinsville Speedway", "Michigan International Speedway",
+    "New Hampshire Motor Speedway", "North Wilkesboro Speedway", "Phoenix Raceway",
+    "Pocono Raceway", "Richmond Raceway", "Rockingham Speedway", "Sonoma Raceway",
+    "South Boston Speedway", "Talladega Superspeedway", "Texas Motor Speedway",
+    "Watkins Glen International"
 ])
 
+# Run type
 run_type = st.radio("Run Type", ["Qualifying", "Short Run", "Long Run"])
 
-st.markdown("### Handling Feedback")
-entry = st.slider("Corner Entry", -5, 5, 0)
-mid = st.slider("Mid Corner", -5, 5, 0)
-exit = st.slider("Corner Exit", -5, 5, 0)
+# Input method
+mode = st.radio("Choose Input Method", ["Upload Setup File", "Enter Setup Manually"])
+# === Manual Input Section ===
+setup_data = {}
 
-uploaded_file = st.file_uploader("Upload your iRacing setup (.html)", type=["html"])
-if uploaded_file:
-    st.success("Setup file uploaded.")
+if mode == "Enter Setup Manually":
+    st.markdown("### 🛠 Suspension – Shock Clicks (0–10)")
 
-st.markdown("### Recommended Adjustments")
-if entry < 0:
-    st.write("- Lower brake bias by 1–2% (car is loose on entry)")
-elif entry > 0:
-    st.write("- Raise brake bias by 1–2% (car is tight on entry)")
+    col1, col2 = st.columns(2)
+    with col1:
+        setup_data["LF_LS_Comp"] = st.slider("LF LS Compression", 0, 10, 5)
+        setup_data["LF_LS_Rebound"] = st.slider("LF LS Rebound", 0, 10, 5)
+        setup_data["LR_LS_Comp"] = st.slider("LR LS Compression", 0, 10, 5)
+        setup_data["LR_LS_Rebound"] = st.slider("LR LS Rebound", 0, 10, 5)
+    with col2:
+        setup_data["RF_LS_Comp"] = st.slider("RF LS Compression", 0, 10, 5)
+        setup_data["RF_LS_Rebound"] = st.slider("RF LS Rebound", 0, 10, 5)
+        setup_data["RR_LS_Comp"] = st.slider("RR LS Compression", 0, 10, 5)
+        setup_data["RR_LS_Rebound"] = st.slider("RR LS Rebound", 0, 10, 5)
 
-if mid < 0:
-    st.write("- Soften front ARB or increase RF rebound (mid corner is loose)")
-elif mid > 0:
-    st.write("- Stiffen front ARB or reduce front rebound (mid corner is tight)")
+    st.markdown("### 🌀 Springs & Ride Heights")
 
-if exit < 0:
-    st.write("- Soften RR spring or reduce RR rebound (loose on exit)")
-elif exit > 0:
-    st.write("- Add RR spring preload or increase rebound (tight on exit)")
+    setup_data["LF_Spring"] = st.slider("LF Spring Rate (lb/in)", 300, 800, 500)
+    setup_data["RF_Spring"] = st.slider("RF Spring Rate (lb/in)", 300, 800, 500)
+    setup_data["LR_Spring"] = st.slider("LR Spring Rate (lb/in)", 200, 600, 400)
+    setup_data["RR_Spring"] = st.slider("RR Spring Rate (lb/in)", 200, 600, 400)
 
-st.write("- Adjust crossweight ±0.2% based on balance")
-st.write("- Tire pressure ±0.5 psi (respect iRacing limits)")
-st.write("- Monitor ride height effect on RF/RR platform")
+    setup_data["RF_RideHeight"] = st.slider("RF Ride Height (in)", 1.5, 3.0, 2.0, 0.01)
+    setup_data["RR_RideHeight"] = st.slider("RR Ride Height (in)", 2.0, 3.5, 2.5, 0.01)
 
-st.markdown("### Editables (Car Profiles Preview)")
-if os.path.exists("ShearerPNW_Easy_Tuner_Editables/car_profiles.json"):
-    with open("ShearerPNW_Easy_Tuner_Editables/car_profiles.json") as f:
-        data = json.load(f)
-    st.json(data)
+    st.markdown("### 🛑 Brakes, Balance & Driveline")
+
+    setup_data["Brake_Bias"] = st.slider("Brake Bias (%)", 55.0, 70.0, 60.0)
+    setup_data["Crossweight"] = st.slider("Crossweight (%)", 48.0, 52.0, 50.0)
+    setup_data["Diff_Preload"] = st.slider("Differential Preload (ft-lbs)", 0, 75, 25)
+# === Upload Mode Placeholder ===
+if mode == "Upload Setup File":
+    uploaded_file = st.file_uploader("Upload your iRacing setup (.html)", type=["html"])
+    if uploaded_file:
+        st.success("Setup file uploaded.")
+        st.warning("Setup parsing coming in future update.")
+
+# === Tuning Output ===
+st.markdown("### 🧠 Recommended Adjustments")
+
+if mode == "Enter Setup Manually":
+    if setup_data["Brake_Bias"] > 67:
+        st.write("- Lower brake bias 1–2% to improve corner entry rotation.")
+    elif setup_data["Brake_Bias"] < 57:
+        st.write("- Raise brake bias to prevent rear lock-up under braking.")
+
+    if setup_data["RR_RideHeight"] > 2.9:
+        st.write("- Reduce RR ride height slightly to stabilize exit.")
+    elif setup_data["RR_RideHeight"] < 2.2:
+        st.write("- Raise RR height if you feel tightness under throttle.")
+
+    if setup_data["Crossweight"] > 51.5:
+        st.write("- Lower crossweight 0.2–0.5% to help with corner entry.")
+    elif setup_data["Crossweight"] < 49.0:
+        st.write("- Raise crossweight slightly for throttle stability.")
+
+    st.write("- Review front spring split for turn-in and platform control.")
+    st.write("- Use shock clickers to fine-tune response in each corner.")
+
+elif mode == "Upload Setup File":
+    st.info("Manual tuning suggestions will appear here after file parsing is enabled.")
+# === Optional JSON Preview ===
+st.markdown("### 🔍 Car Profile Data (JSON Preview)")
+editable_path = "ShearerPNW_Easy_Tuner_Editables/car_profiles.json"
+
+if os.path.exists(editable_path):
+    with open(editable_path) as f:
+        try:
+            profile_data = json.load(f)
+            st.json(profile_data)
+        except:
+            st.warning("Could not parse JSON from car_profiles.json")
+else:
+    st.info("No car profile file found at expected location.")
+
+# === End of File ===
+st.markdown("---")
+st.caption("ShearerPNW Easy Tuner v1.0 – Manual Input Mode (Next Gen Only)")

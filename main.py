@@ -39,8 +39,12 @@ try:
     if abs(temp_diff) > 10:
         if temp_diff > 0:
             st.warning(f"Track is {temp_diff}°F hotter than baseline – expect lower rear grip.")
+            st.write("➤ Suggestion: Raise rear pressures slightly OR increase rear rebound.")
+            st.write("➤ Suggestion: Consider increasing RR ride height by 0.05–0.10\" for stability.")
         else:
             st.info(f"Track is {abs(temp_diff)}°F cooler – watch for early tire peak and increased front grip.")
+            st.write("➤ Suggestion: Lower tire pressures slightly to help with warm-up.")
+            st.write("➤ Suggestion: Consider softening front rebound to help turn-in on cold tires.")
 
     tips = corner_rules.get(track, {}).get(corner, {}).get("rules", {}).get(feedback, [])
     if tips:
@@ -58,14 +62,12 @@ st.markdown("## 📄 Upload Setup File (Future Support)")
 uploaded_file = st.file_uploader("Upload your iRacing setup (.html)", type=["html"])
 if uploaded_file:
     st.success("Setup file uploaded. Parsing coming soon.")
-    # TODO: Parse setup file and extract current settings
 
 # === SECTION: IBT Upload (Telemetry) ===
 st.markdown("## 📊 Telemetry File Upload (.ibt)")
 uploaded_ibt = st.file_uploader("Upload iRacing Telemetry (.ibt)", type=["ibt"])
 if uploaded_ibt:
     st.success("IBT file uploaded. Visualization coming soon.")
-    # TODO: Parse IBT and plot shock velocity, throttle trace, ride heights, etc.
 
 # === SECTION: Optional Setup Input (Future Logic Hook) ===
 st.markdown("---")

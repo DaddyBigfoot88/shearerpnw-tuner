@@ -17,7 +17,8 @@ if os.path.exists(corner_rules_path):
         corner_rules = json.load(f)
 
 # === SECTION: Track, Corner, Feedback ===
-track = st.selectbox("Select Track", list(corner_rules.keys()))
+track = "Watkins Glen International"
+st.text(f"Track locked: {track}")
 corner = st.selectbox("Select Track Corner", list(corner_rules.get(track, {}).keys()))
 feedback = st.selectbox("How does the car feel?", [
     "Loose on entry", "Loose mid-corner", "Loose on exit",
@@ -32,32 +33,36 @@ else:
     severity = "severe"
 
 # === SECTION: Track Temperature Comparison ===
-current_temp = st.slider("Track Temperature (°F)", 60, 140, 90)
-baseline_temp = st.slider("Setup Baseline Temperature (°F)", 60, 140, 85)
+st.markdown("### 🌡️ Track Temperature Adjustment Mode")
+temp_only = st.checkbox("Show adjustments for temperature difference only")
+current_temp = st.slider("Current Track Temperature (°F)", 60, 140, 90)
+baseline_temp = st.slider("Baseline Setup Temperature (°F)", 60, 140, corner_rules.get(track, {}).get("baseline_temp", 85))
 temp_diff = current_temp - baseline_temp
 
-if abs(temp_diff) > 10:
-    if temp_diff > 0:
-        st.warning(f"Track is {temp_diff}°F hotter than setup baseline. Expect reduced grip, especially rear.")
+if temp_only:
+    st.markdown("### 🔧 Temperature-Based Adjustment Suggestions")
+    if abs(temp_diff) > 5:
+        if temp_diff > 0:
+            st.warning(f"Track is {temp_diff}°F hotter than setup baseline. Expect reduced grip.")
+            st.write("- Lower tire pressures by 0.5–1.5 psi")
+            st.write("- Stiffen shocks slightly to control excess movement")
+            st.write("- Consider increasing rear spring rate or diff preload")
+        else:
+            st.info(f"Track is {abs(temp_diff)}°F cooler than baseline. Expect more grip, lower buildup.")
+            st.write("- Raise tire pressures by 0.5–1.5 psi")
+            st.write("- Soften rear shocks slightly for added rotation")
+            st.write("- May reduce preload or raise RR ride height")
     else:
-        st.info(f"Track is {abs(temp_diff)}°F cooler than baseline. Expect more initial grip, lower tire pressure buildup.")
-
-# === SECTION: Show Adjustment Suggestions ===
-st.markdown("## 🧠 Setup Adjustment Suggestions")
-try:
-    track_data = corner_rules.get(track, {})
-    corner_data = track_data.get(corner, {})
-    rules = corner_data.get("rules", {})
-    feedback_data = rules.get(feedback, {})
-    tips = feedback_data.get(severity, [])
-
+        st.success("Track temp is close to baseline. No major adjustments needed.")
+else:
+    # === SECTION: Show Adjustment Suggestions ===
+    st.markdown("## 🧠 Setup Adjustment Suggestions")
+    tips = corner_rules.get(track, {}).get(corner, {}).get("rules", {}).get(feedback, {}).get(severity, [])
     if tips:
         for tip in tips:
             st.write(tip)
     else:
-        st.info(f"No data found for: Track={track}, Corner={corner}, Feedback={feedback}, Severity={severity}")
-except Exception as e:
-    st.error(f"Error finding suggestions: {e}")
+        st.info("No suggestions available for this symptom at this corner.")
 
 # === SECTION: Placeholder for Manual Setup Input ===
 st.markdown("## ⚙️ Current Setup (Manual Input Placeholder)")

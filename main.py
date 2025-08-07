@@ -3,8 +3,8 @@ import json
 import os
 
 # === SECTION: Access Control ===
-if st.text_input("Enter Access Code") != "Shearer":
-    st.stop()
+#if st.text_input("Enter Access Code") != "Shearer":
+   # st.stop()
 
 st.title("ShearerPNW Easy Tuner")
 st.subheader("NASCAR Next Gen Feedback-Based Setup Assistant")

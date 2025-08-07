@@ -16,9 +16,13 @@ if os.path.exists(corner_rules_path):
     with open(corner_rules_path) as f:
         corner_rules = json.load(f)
 
-# === SECTION: Track Selection & Handling Feedback ===
+# === SECTION: Track and Run Type ===
 track = st.selectbox("Select Track", list(corner_rules.keys()))
 run_type = st.radio("Run Type", ["Qualifying", "Short Run", "Long Run"])
+current_temp = st.slider("Track Temperature (°F)", 60, 140, 90)
+baseline_temp = st.slider("Setup Baseline Temperature (°F)", 60, 140, 85)
+
+# === SECTION: Corner Feedback Input ===
 corner = st.selectbox("Select Track Corner", list(corner_rules.get(track, {}).keys()))
 feedback = st.selectbox("How does the car feel?", [
     "Loose on entry", "Loose mid-corner", "Loose on exit",
@@ -27,56 +31,32 @@ feedback = st.selectbox("How does the car feel?", [
     "Understeer entire turn", "Oversteer entire turn"
 ])
 
-# === SECTION: Track Temperature Comparison ===
-current_temp = st.slider("Current Track Temperature (°F)", 60, 140, 90)
-baseline_temp = corner_rules.get(track, {}).get(corner, {}).get("baseline_temp", 85)
-st.slider("Baseline Setup Temperature (°F)", 60, 140, baseline_temp, disabled=True)
+# === SECTION: Track-Corner Feedback Suggestions ===
+st.markdown("## 🧠 Track-Corner Feedback Suggestions")
+temp_diff = current_temp - baseline_temp
+if abs(temp_diff) > 10:
+    if temp_diff > 0:
+        st.warning(f"Track is {temp_diff}°F hotter than setup baseline. Expect reduced grip, especially rear.")
+    else:
+        st.info(f"Track is {abs(temp_diff)}°F cooler than baseline. Expect more initial grip, lower tire pressure buildup.")
 
-# === SECTION: Track-Corner Feedback Rule Engine ===
-st.markdown("## 📍 Track-Corner Feedback Suggestions")
 try:
-    temp_diff = current_temp - baseline_temp
-    if abs(temp_diff) > 10:
-        if temp_diff > 0:
-            st.warning(f"Track is {temp_diff}°F hotter than baseline – expect lower rear grip.")
-            st.write("➤ Suggestion: Raise rear pressures slightly OR increase rear rebound.")
-            st.write("➤ Suggestion: Consider increasing RR ride height by 0.05–0.10\" for stability.")
-        else:
-            st.info(f"Track is {abs(temp_diff)}°F cooler – watch for early tire peak and increased front grip.")
-            st.write("➤ Suggestion: Lower tire pressures slightly to help with warm-up.")
-            st.write("➤ Suggestion: Consider softening front rebound to help turn-in on cold tires.")
-
     tips = corner_rules.get(track, {}).get(corner, {}).get("rules", {}).get(feedback, [])
     if tips:
         for tip in tips:
             st.write(f"➤ {tip}")
     else:
-        st.info("No tips yet for this corner/feedback. Using general suggestions.")
-        st.write("- Try adjusting rear rebound or preload.")
-        st.write("- Review shock slopes or ride height differences.")
+        st.info("No tips available for this feedback at that corner.")
 except:
-    st.warning("Error loading rule logic or tips.")
+    st.warning("Error loading corner-based tips.")
 
-# === SECTION: Setup File Upload (HTML) ===
-st.markdown("## 📄 Upload Setup File (Future Support)")
-uploaded_file = st.file_uploader("Upload your iRacing setup (.html)", type=["html"])
-if uploaded_file:
-    st.success("Setup file uploaded. Parsing coming soon.")
-
-# === SECTION: IBT Upload (Telemetry) ===
-st.markdown("## 📊 Telemetry File Upload (.ibt)")
-uploaded_ibt = st.file_uploader("Upload iRacing Telemetry (.ibt)", type=["ibt"])
-if uploaded_ibt:
-    st.success("IBT file uploaded. Visualization coming soon.")
-
-# === SECTION: Optional Setup Input (Future Logic Hook) ===
-st.markdown("---")
-st.markdown("## 🛠 Optional: Current Setup Entry (Does not affect logic yet)")
+# === SECTION: Input Method ===
+mode = st.radio("Choose Input Method", ["Upload Setup File", "Enter Setup Manually"])
 setup_data = {}
 
-mode = st.radio("Setup Input Method", ["Enter Setup Manually", "Skip"])
+# === SECTION: Manual Setup Input ===
 if mode == "Enter Setup Manually":
-    st.markdown("### 🛞 Tires")
+    st.markdown("## 🛞 Tires")
     col1, col2 = st.columns(2)
     with col1:
         setup_data["LF_Pressure"] = st.slider("LF Cold Pressure (psi)", 10.0, 30.0, 13.0, 0.5)
@@ -85,20 +65,22 @@ if mode == "Enter Setup Manually":
         setup_data["RF_Pressure"] = st.slider("RF Cold Pressure (psi)", 10.0, 30.0, 27.0, 0.5)
         setup_data["RR_Pressure"] = st.slider("RR Cold Pressure (psi)", 10.0, 30.0, 27.0, 0.5)
 
-    st.markdown("### 🛑 Chassis & Brakes")
+    st.markdown("## 🛑 Chassis & Brakes")
     setup_data["Nose_Weight"] = st.slider("Nose Weight (%)", 49.0, 52.0, 51.0)
     setup_data["Front_Bias"] = st.slider("Front Brake Bias (%)", 30.0, 60.0, 38.0)
     setup_data["Front_MC"] = st.selectbox("Front MC Size", ["0.625\"", "0.7\"", "0.75\"", "0.875\"", "0.9\"", "1.0\""])
     setup_data["Rear_MC"] = st.selectbox("Rear MC Size", ["0.625\"", "0.7\"", "0.75\"", "0.875\"", "0.9\"", "1.0\""])
+    setup_data["Steering_Pinion"] = st.selectbox("Steering Pinion (mm/rev)", ["40", "50", "60"])
+    setup_data["Steering_Offset"] = st.slider("Steering Offset (deg)", -5.0, 5.0, 3.0, 0.1)
 
-    st.markdown("### 🔧 Suspension (Per Corner)")
+    st.markdown("## 🔧 Suspension (Per Corner)")
     for corner_name in ["LF", "RF", "LR", "RR"]:
-        st.markdown(f"#### {corner_name}")
+        st.markdown(f"### {corner_name}")
         setup_data[f"{corner_name}_Spring"] = st.slider(f"{corner_name} Spring Rate (lb/in)", 200, 3200, 1500)
         setup_data[f"{corner_name}_Shock_Offset"] = st.slider(f"{corner_name} Shock Collar Offset (in)", 3.0, 5.0, 4.0, 0.1)
         setup_data[f"{corner_name}_Camber"] = st.slider(f"{corner_name} Camber (°)", -6.0, +6.0, 0.0, 0.1)
         if "F" in corner_name:
-            setup_data[f"{corner_name}_Caster"] = st.slider(f"{corner_name} Caster (°)", 8.0, 18.0, 10.0, 0.1)
+            setup_data[f"{corner_name}_Caster"] = st.slider(f"{corner_name} Caster (°)", +8.0, +18.0, +10.0, 0.1)
         setup_data[f"{corner_name}_Toe"] = st.slider(f"{corner_name} Toe (in)", -0.25, 0.25, 0.0, 0.01)
         setup_data[f"{corner_name}_LS_Comp"] = st.slider(f"{corner_name} LS Compression", 0, 10, 5)
         setup_data[f"{corner_name}_HS_Comp"] = st.slider(f"{corner_name} HS Compression", 0, 10, 5)
@@ -107,7 +89,7 @@ if mode == "Enter Setup Manually":
         setup_data[f"{corner_name}_HS_Rebound"] = st.slider(f"{corner_name} HS Rebound", 0, 10, 5)
         setup_data[f"{corner_name}_HS_Rebound_Slope"] = st.slider(f"{corner_name} HS Rebound Slope", 0, 10, 5)
 
-    st.markdown("### 🔩 Rear End & Driveline")
+    st.markdown("## 🔩 Rear End & Driveline")
     setup_data["Final_Drive"] = st.selectbox("Final Drive Ratio", ["4.050", "4.075", "4.100", "4.125", "4.150"])
     setup_data["Diff_Preload"] = st.slider("Differential Preload (ft-lbs)", 0, 75, 0)
     setup_data["RearARB_Diameter"] = st.selectbox("Rear ARB Diameter", ["1.4\"", "1.5\"", "1.6\""])
@@ -115,6 +97,22 @@ if mode == "Enter Setup Manually":
     setup_data["RearARB_Preload"] = st.slider("Rear ARB Preload (ft-lbs)", -200.0, 0.0, 0.0, 1.0)
     setup_data["RearARB_Attach"] = st.selectbox("Rear ARB Attach", ["1", "2"])
 
-# === SECTION: Footer ===
+# === SECTION: Setup File Upload (HTML) ===
+if mode == "Upload Setup File":
+    uploaded_file = st.file_uploader("Upload your iRacing setup (.html)", type=["html"])
+    if uploaded_file:
+        st.success("Setup file uploaded.")
+        st.warning("Setup parsing coming in future update.")
+
+# === SECTION: IBT Telemetry (Placeholder) ===
+st.markdown("## 📊 Telemetry Analysis (Experimental)")
+uploaded_ibt = st.file_uploader("Upload your iRacing Telemetry (.ibt) file", type=["ibt"])
+if uploaded_ibt:
+    st.success("IBT file uploaded. Parsing coming soon.")
+    st.info("Once parsing is enabled, you’ll see throttle, brake, ride height, shock velocity, and more plotted here.")
+else:
+    st.caption("Upload a .ibt file to visualize key telemetry signals for tuning.")
+
+# === SECTION: End ===
 st.markdown("---")
-st.caption("ShearerPNW Easy Tuner – v1.1 | Feedback Driven | IBT Support (Soon)")
+st.caption("ShearerPNW Easy Tuner – v1.1 (Manual Entry + Corner Feedback)")

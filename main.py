@@ -21,14 +21,6 @@ car = "NASCAR Next Gen"
 
 # 🏁 Track and Run Type
 track = st.selectbox("Select Track", [
-    "Atlanta Motor Speedway", "Auto Club Speedway", "Bristol Motor Speedway",
-    "Charlotte Motor Speedway", "Charlotte Roval", "Darlington Raceway",
-    "Daytona International Speedway", "Dover Motor Speedway", "Gateway (WWT Raceway)",
-    "Homestead-Miami Speedway", "Iowa Speedway", "Kansas Speedway",
-    "Las Vegas Motor Speedway", "Martinsville Speedway", "Michigan International Speedway",
-    "New Hampshire Motor Speedway", "North Wilkesboro Speedway", "Phoenix Raceway",
-    "Pocono Raceway", "Richmond Raceway", "Rockingham Speedway", "Sonoma Raceway",
-    "South Boston Speedway", "Talladega Superspeedway", "Texas Motor Speedway",
     "Watkins Glen International"
 ])
 run_type = st.radio("Run Type", ["Qualifying", "Short Run", "Long Run"])

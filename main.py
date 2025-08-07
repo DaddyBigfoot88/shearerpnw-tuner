@@ -16,9 +16,11 @@ if os.path.exists(corner_rules_path):
     with open(corner_rules_path) as f:
         corner_rules = json.load(f)
 
-# === SECTION: Track, Corner, Feedback ===
+# === SECTION: Track (Locked) ===
 track = "Watkins Glen International"
 st.text(f"Track locked: {track}")
+
+# === SECTION: Corner, Feedback, Severity
 corner = st.selectbox("Select Track Corner", list(corner_rules.get(track, {}).keys()))
 feedback = st.selectbox("How does the car feel?", [
     "Loose on entry", "Loose mid-corner", "Loose on exit",
@@ -32,9 +34,10 @@ elif severity_level <= 7:
 else:
     severity = "severe"
 
-# === SECTION: Track Temperature Comparison ===
+# === SECTION: Temperature Comparison
 st.markdown("### 🌡️ Track Temperature Adjustment Mode")
 temp_only = st.checkbox("Show adjustments for temperature difference only")
+
 current_temp = st.slider("Current Track Temperature (°F)", 60, 140, 90)
 baseline_temp = st.slider("Baseline Setup Temperature (°F)", 60, 140, corner_rules.get(track, {}).get("baseline_temp", 85))
 temp_diff = current_temp - baseline_temp
@@ -43,7 +46,7 @@ if temp_only:
     st.markdown("### 🔧 Temperature-Based Adjustment Suggestions")
     if abs(temp_diff) > 5:
         if temp_diff > 0:
-            st.warning(f"Track is {temp_diff}°F hotter than setup baseline. Expect reduced grip.")
+            st.warning(f"Track is {temp_diff}°F hotter than baseline. Expect reduced grip.")
             st.write("- Lower tire pressures by 0.5–1.5 psi")
             st.write("- Stiffen shocks slightly to control excess movement")
             st.write("- Consider increasing rear spring rate or diff preload")
@@ -54,16 +57,17 @@ if temp_only:
             st.write("- May reduce preload or raise RR ride height")
     else:
         st.success("Track temp is close to baseline. No major adjustments needed.")
+
+# === SECTION: Feedback-Based Suggestions
 else:
-    # === SECTION: Show Adjustment Suggestions ===
     st.markdown("## 🧠 Setup Adjustment Suggestions")
 
-    # Defensive fetching for nested logic
+    # Defensive access
     track_data = corner_rules.get(track, {})
-    corner_data = track_data.get(corner, {})
-    rules_data = corner_data.get("rules", {})
-    feedback_data = rules_data.get(feedback, {})
-    tips = feedback_data.get(severity, [])
+    corner_data = track_data.get(corner, {}) if isinstance(track_data, dict) else {}
+    rules_data = corner_data.get("rules", {}) if isinstance(corner_data, dict) else {}
+    feedback_data = rules_data.get(feedback, {}) if isinstance(rules_data, dict) else {}
+    tips = feedback_data.get(severity, []) if isinstance(feedback_data, dict) else []
 
     if tips:
         for tip in tips:
@@ -71,10 +75,10 @@ else:
     else:
         st.info("No suggestions available for this symptom at this corner and severity level.")
 
-# === SECTION: Placeholder for Manual Setup Input ===
+# === SECTION: Placeholder for Manual Setup Input
 st.markdown("## ⚙️ Current Setup (Manual Input Placeholder)")
 st.info("Setup entry and telemetry upload coming soon.")
 
-# === SECTION: Footer ===
+# === SECTION: Footer
 st.markdown("---")
 st.caption("ShearerPNW Easy Tuner – v1.2 Corner Logic Engine")

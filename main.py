@@ -30,7 +30,6 @@ run_type = st.radio("Run Type", ["Qualifying", "Short Run", "Long Run"])
 
 # Input method
 mode = st.radio("Choose Input Method", ["Upload Setup File", "Enter Setup Manually"])
-# === Manual Input Section ===
 setup_data = {}
 
 if mode == "Enter Setup Manually":
@@ -59,10 +58,10 @@ if mode == "Enter Setup Manually":
     setup_data["RR_RideHeight"] = st.slider("RR Ride Height (in)", 2.0, 3.5, 2.5, 0.01)
 
     st.markdown("### 🛑 Brakes, Balance & Driveline")
-
     setup_data["Brake_Bias"] = st.slider("Brake Bias (%)", 55.0, 70.0, 60.0)
     setup_data["Crossweight"] = st.slider("Crossweight (%)", 48.0, 52.0, 50.0)
     setup_data["Diff_Preload"] = st.slider("Differential Preload (ft-lbs)", 0, 75, 25)
+
 # === Upload Mode Placeholder ===
 if mode == "Upload Setup File":
     uploaded_file = st.file_uploader("Upload your iRacing setup (.html)", type=["html"])
@@ -71,7 +70,7 @@ if mode == "Upload Setup File":
         st.warning("Setup parsing coming in future update.")
 
 # === Tuning Output ===
-st.markdown("### 🧠 Recommended Adjustments")
+st.markdown("### 🧐 Recommended Adjustments")
 
 if mode == "Enter Setup Manually":
     if setup_data["Brake_Bias"] > 67:
@@ -94,10 +93,37 @@ if mode == "Enter Setup Manually":
 
 elif mode == "Upload Setup File":
     st.info("Manual tuning suggestions will appear here after file parsing is enabled.")
+
+# === Corner Feedback Sliders ===
+st.markdown("### 🔹 Track-Corner Based Feedback")
+corner = st.selectbox("Select Track Corner", ["T1", "T2", "T3", "T5", "T6", "T7"])
+feedback = st.selectbox("How does the car feel?", [
+    "Loose on entry", "Loose mid-corner", "Loose on exit",
+    "Tight on entry", "Tight mid-corner", "Tight on exit"
+])
+
+# === Load corner setup rules ===
+corner_rules_path = "ShearerPNW_Easy_Tuner_Editables/track_corner_rules.json"
+corner_rules = {}
+if os.path.exists(corner_rules_path):
+    with open(corner_rules_path) as f:
+        corner_rules = json.load(f)
+
+# === Show corner-based tips ===
+st.markdown("### 📍 Corner-Based Suggestions")
+try:
+    tips = corner_rules.get(track, {}).get(corner, {}).get("rules", {}).get(feedback, [])
+    if tips:
+        for tip in tips:
+            st.write(tip)
+    else:
+        st.info("No tips available for this feedback at that corner.")
+except:
+    st.warning("Error loading corner-based tips.")
+
 # === Optional JSON Preview ===
 st.markdown("### 🔍 Car Profile Data (JSON Preview)")
 editable_path = "ShearerPNW_Easy_Tuner_Editables/car_profiles.json"
-
 if os.path.exists(editable_path):
     with open(editable_path) as f:
         try:
@@ -110,4 +136,4 @@ else:
 
 # === End of File ===
 st.markdown("---")
-st.caption("ShearerPNW Easy Tuner v1.0 – Manual Input Mode (Next Gen Only)")
+st.caption("ShearerPNW Easy Tuner v1.1 – Now with Corner-Specific Feedback")

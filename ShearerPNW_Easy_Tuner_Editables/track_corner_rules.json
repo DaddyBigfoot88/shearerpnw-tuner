@@ -1,0 +1,93 @@
+{
+  "Watkins Glen International": {
+    "T1": {
+      "corner_name": "Turn 1 (Right-hander)",
+      "banking_deg": 6,
+      "surface": "Asphalt",
+      "rules": {
+        "Loose on entry": [
+          "➤ Lower brake bias 1–2%",
+          "➤ Add 1 click RF rebound"
+        ],
+        "Loose mid-corner": [
+          "➤ Add 1 click RR LS rebound",
+          "➤ Increase crossweight by 0.3%"
+        ],
+        "Loose on exit": [
+          "➤ Add 1 click RR HS rebound",
+          "➤ Raise RR ride height 0.1\""
+        ]
+      }
+    },
+    "T2": {
+      "corner_name": "Turn 2 (Esses Up)",
+      "banking_deg": 4,
+      "surface": "Asphalt",
+      "rules": {
+        "Unstable mid-corner": [
+          "➤ Stiffen front springs",
+          "➤ Increase front rebound 1 click"
+        ]
+      }
+    },
+    "T3": {
+      "corner_name": "Turn 3 (Esses Exit)",
+      "banking_deg": 4,
+      "surface": "Asphalt",
+      "rules": {
+        "Loose on exit": [
+          "➤ Add preload (5–10 ft-lbs)",
+          "➤ Reduce rear toe-in slightly"
+        ]
+      }
+    },
+    "T5": {
+      "corner_name": "Turn 5 (Bus Stop Entry)",
+      "banking_deg": 2,
+      "surface": "Asphalt",
+      "rules": {
+        "Loose on entry": [
+          "➤ Soften front ARB",
+          "➤ Add 1 click RR compression"
+        ],
+        "Unstable under braking": [
+          "➤ Lower rear brake pressure",
+          "➤ Add preload to diff"
+        ]
+      }
+    },
+    "T6": {
+      "corner_name": "Turn 6 (Carousel)",
+      "banking_deg": 6,
+      "surface": "Asphalt",
+      "rules": {
+        "Loose on entry": [
+          "➤ Increase RF rebound 1 click"
+        ],
+        "Loose mid-corner": [
+          "➤ Add 1 click RR LS rebound"
+        ],
+        "Loose on exit": [
+          "➤ Add 1 click RR HS rebound",
+          "➤ Raise RR ride height 0.1\"",
+          "➤ Increase preload"
+        ]
+      }
+    },
+    "T7": {
+      "corner_name": "Turn 7 (Final Corner)",
+      "banking_deg": 5,
+      "surface": "Asphalt",
+      "rules": {
+        "Loose on exit": [
+          "➤ Soften LR spring by 50 lbs",
+          "➤ Increase crossweight"
+        ],
+        "Tight on exit": [
+          "➤ Soften RR rebound",
+          "➤ Reduce preload 5 ft-lbs"
+        ]
+      }
+    }
+  }
+}

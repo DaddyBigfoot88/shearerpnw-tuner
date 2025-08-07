@@ -2,21 +2,21 @@ import streamlit as st
 import json
 import os
 
-# 🔒 Access Control
+# === SECTION: Access Control ===
 if st.text_input("Enter Access Code") != "Shearer":
     st.stop()
 
 st.title("ShearerPNW Easy Tuner")
 st.subheader("NASCAR Next Gen Feedback-Based Setup Assistant")
 
-# 🧠 Load Track-Corner Rules
+# === SECTION: Load Track-Corner Rules ===
 corner_rules_path = "ShearerPNW_Easy_Tuner_Editables/track_corner_rules.json"
 corner_rules = {}
 if os.path.exists(corner_rules_path):
     with open(corner_rules_path) as f:
         corner_rules = json.load(f)
 
-# 🏁 Track Selection & Run Type
+# === SECTION: Track Selection & Handling Feedback ===
 track = st.selectbox("Select Track", list(corner_rules.keys()))
 run_type = st.radio("Run Type", ["Qualifying", "Short Run", "Long Run"])
 corner = st.selectbox("Select Track Corner", list(corner_rules.get(track, {}).keys()))
@@ -27,16 +27,15 @@ feedback = st.selectbox("How does the car feel?", [
     "Understeer entire turn", "Oversteer entire turn"
 ])
 
-# 🌡️ Track & Baseline Temperature Comparison
+# === SECTION: Track Temperature Comparison ===
 current_temp = st.slider("Current Track Temperature (°F)", 60, 140, 90)
 baseline_temp = corner_rules.get(track, {}).get(corner, {}).get("baseline_temp", 85)
 st.slider("Baseline Setup Temperature (°F)", 60, 140, baseline_temp, disabled=True)
 
-# 🧠 Feedback Suggestions
+# === SECTION: Track-Corner Feedback Rule Engine ===
 st.markdown("## 📍 Track-Corner Feedback Suggestions")
 try:
     temp_diff = current_temp - baseline_temp
-
     if abs(temp_diff) > 10:
         if temp_diff > 0:
             st.warning(f"Track is {temp_diff}°F hotter than baseline – expect lower rear grip.")
@@ -54,19 +53,21 @@ try:
 except:
     st.warning("Error loading rule logic or tips.")
 
-# 📂 Setup File Upload (HTML) – Future Support
+# === SECTION: Setup File Upload (HTML) ===
 st.markdown("## 📄 Upload Setup File (Future Support)")
 uploaded_file = st.file_uploader("Upload your iRacing setup (.html)", type=["html"])
 if uploaded_file:
     st.success("Setup file uploaded. Parsing coming soon.")
+    # TODO: Parse setup file and extract current settings
 
-# 📊 IBT Upload (Future Telemetry)
+# === SECTION: IBT Upload (Telemetry) ===
 st.markdown("## 📊 Telemetry File Upload (.ibt)")
 uploaded_ibt = st.file_uploader("Upload iRacing Telemetry (.ibt)", type=["ibt"])
 if uploaded_ibt:
     st.success("IBT file uploaded. Visualization coming soon.")
+    # TODO: Parse IBT and plot shock velocity, throttle trace, ride heights, etc.
 
-# 🛠 Manual Setup (Moved to Bottom)
+# === SECTION: Optional Setup Input (Future Logic Hook) ===
 st.markdown("---")
 st.markdown("## 🛠 Optional: Current Setup Entry (Does not affect logic yet)")
 setup_data = {}
@@ -112,6 +113,6 @@ if mode == "Enter Setup Manually":
     setup_data["RearARB_Preload"] = st.slider("Rear ARB Preload (ft-lbs)", -200.0, 0.0, 0.0, 1.0)
     setup_data["RearARB_Attach"] = st.selectbox("Rear ARB Attach", ["1", "2"])
 
-# ✅ Done
+# === SECTION: Footer ===
 st.markdown("---")
-st.caption("ShearerPNW Easy Tuner – v1.1 | Feedback-Driven | Setup Input Optional")
+st.caption("ShearerPNW Easy Tuner – v1.1 | Feedback Driven | IBT Support (Soon)")

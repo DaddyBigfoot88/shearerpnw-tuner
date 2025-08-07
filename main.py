@@ -57,12 +57,19 @@ if temp_only:
 else:
     # === SECTION: Show Adjustment Suggestions ===
     st.markdown("## 🧠 Setup Adjustment Suggestions")
-    tips = corner_rules.get(track, {}).get(corner, {}).get("rules", {}).get(feedback, {}).get(severity, [])
+
+    # Defensive fetching for nested logic
+    track_data = corner_rules.get(track, {})
+    corner_data = track_data.get(corner, {})
+    rules_data = corner_data.get("rules", {})
+    feedback_data = rules_data.get(feedback, {})
+    tips = feedback_data.get(severity, [])
+
     if tips:
         for tip in tips:
             st.write(tip)
     else:
-        st.info("No suggestions available for this symptom at this corner.")
+        st.info("No suggestions available for this symptom at this corner and severity level.")
 
 # === SECTION: Placeholder for Manual Setup Input ===
 st.markdown("## ⚙️ Current Setup (Manual Input Placeholder)")

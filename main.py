@@ -32,24 +32,35 @@ else:
     severity = "severe"
 
 # === SECTION: Track Temperature Comparison ===
-current_temp = st.slider("Track Temperature (°F)", 60, 140, 90)
-baseline_temp = corner_rules[track].get("baseline_temp", 85)
+temp_mode = st.radio("Do you want adjustments for track temperature only?", ["Yes", "No"], index=1)
+current_temp = st.slider("Current Track Temperature (°F)", 60, 140, 90)
+baseline_temp = st.slider("Baseline Setup Temperature (°F)", 60, 140, corner_rules[track].get("baseline_temp", 85))
 temp_diff = current_temp - baseline_temp
 
-if abs(temp_diff) > 10:
-    if temp_diff > 0:
-        st.warning(f"Track is {temp_diff}°F hotter than setup baseline. Expect reduced grip, especially rear.")
+if temp_mode == "Yes":
+    st.markdown("## 🌡️ Temperature-Based Adjustment Suggestions")
+    if abs(temp_diff) <= 5:
+        st.info("Temperature difference is minor. No major adjustments needed.")
+    elif temp_diff > 5:
+        st.warning(f"Track is {temp_diff}°F hotter than baseline.")
+        st.write("- Increase rear tire pressures by 0.5–1.0 psi")
+        st.write("- Add 1–2 clicks rebound at rear to maintain platform")
+        st.write("- Raise RR ride height slightly to maintain aero balance")
     else:
-        st.info(f"Track is {abs(temp_diff)}°F cooler than baseline. Expect more initial grip, lower tire pressure buildup.")
+        st.success(f"Track is {abs(temp_diff)}°F cooler than baseline.")
+        st.write("- Lower tire pressures by 0.5–1.0 psi to help temps build")
+        st.write("- Consider softening compression dampers for mechanical grip")
+        st.write("- Check splitter clearance due to cooler air density")
 
 # === SECTION: Show Adjustment Suggestions ===
-st.markdown("## 🧠 Setup Adjustment Suggestions")
-tips = corner_rules.get(track, {}).get(corner, {}).get("rules", {}).get(feedback, {}).get(severity, [])
-if tips:
-    for tip in tips:
-        st.write(tip)
-else:
-    st.info("No suggestions available for this symptom at this corner.")
+if temp_mode == "No":
+    st.markdown("## 🧠 Setup Adjustment Suggestions")
+    tips = corner_rules.get(track, {}).get(corner, {}).get("rules", {}).get(feedback, {}).get(severity, [])
+    if tips:
+        for tip in tips:
+            st.write(tip)
+    else:
+        st.info("No suggestions available for this symptom at this corner.")
 
 # === SECTION: Placeholder for Manual Setup Input ===
 st.markdown("## ⚙️ Current Setup (Manual Input Placeholder)")

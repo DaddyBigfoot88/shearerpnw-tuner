@@ -7,34 +7,75 @@
           "slight": [
             "➤ Add 1 click RF LS rebound",
             "➤ Increase RF tire pressure by 0.5 psi",
-            "➤ Raise crossweight by 0.2%"
+            "➤ Raise crossweight by 0.3%"
           ],
           "moderate": [
             "➤ Add 2 clicks RF LS rebound",
             "➤ Increase RF tire pressure by 1.0 psi",
-            "➤ Raise crossweight by 0.5%"
+            "➤ Raise crossweight by 0.5%",
+            "➤ Soften RF bump 1 click"
           ],
           "severe": [
             "➤ Add 3 clicks RF LS rebound",
             "➤ Increase RF tire pressure by 1.5 psi",
-            "➤ Raise crossweight by 0.8%"
+            "➤ Raise crossweight by 0.8%",
+            "➤ Lower nose weight by 0.5%"
           ]
         },
         "Tight on entry": {
           "slight": [
-            "➤ Reduce LF rebound by 1 click",
-            "➤ Lower RF tire pressure by 0.5 psi",
-            "➤ Decrease front brake bias by 1%"
+            "➤ Soften LF rebound 1 click",
+            "➤ Reduce front brake bias by 1%",
+            "➤ Lower RF tire pressure by 0.5 psi"
           ],
           "moderate": [
-            "➤ Reduce LF rebound by 2 clicks",
-            "➤ Lower RF tire pressure by 1.0 psi",
-            "➤ Decrease front brake bias by 2%"
+            "➤ Soften LF rebound 2 clicks",
+            "➤ Reduce brake bias 2%",
+            "➤ Lower RF pressure by 1.0 psi",
+            "➤ Reduce front spring split by 100 lb/in"
           ],
           "severe": [
-            "➤ Reduce LF rebound by 3 clicks",
-            "➤ Lower RF tire pressure by 1.5 psi",
-            "➤ Decrease front brake bias by 3%"
+            "➤ Soften LF rebound 3 clicks",
+            "➤ Lower RF spring 150 lb/in",
+            "➤ Reduce brake bias by 3%",
+            "➤ Lower steering offset by 1°"
+          ]
+        },
+        "Loose mid-corner": {
+          "slight": [
+            "➤ Add 1 click LR rebound",
+            "➤ Raise LR ride height by 0.1\"",
+            "➤ Raise rear tire pressures by 0.5 psi"
+          ],
+          "moderate": [
+            "➤ Add 2 clicks LR rebound",
+            "➤ Raise LR ride height by 0.2\"",
+            "➤ Increase rear spring split 100 lb/in",
+            "➤ Soften RR bump 1 click"
+          ],
+          "severe": [
+            "➤ Add 3 clicks LR rebound",
+            "➤ Raise rear tire pressures by 1.0 psi",
+            "➤ Raise LR ride height 0.3\"",
+            "➤ Increase preload by 10 ft-lbs"
+          ]
+        },
+        "Tight mid-corner": {
+          "slight": [
+            "➤ Lower RF spring rate by 100 lb/in",
+            "➤ Lower front ride height by 0.1\"",
+            "➤ Reduce crossweight by 0.2%"
+          ],
+          "moderate": [
+            "➤ Reduce RF spring 200 lb/in",
+            "➤ Raise rear ARB preload by 5 ft-lbs",
+            "➤ Soften RF rebound 1 click"
+          ],
+          "severe": [
+            "➤ Raise rear ride height by 0.2\"",
+            "➤ Soften rear ARB",
+            "➤ Reduce preload by 10 ft-lbs",
+            "➤ Reduce crossweight by 0.5%"
           ]
         },
         "Loose on exit": {
@@ -46,12 +87,14 @@
           "moderate": [
             "➤ Add 2 clicks RR HS rebound",
             "➤ Raise RR ride height by 0.2\"",
-            "➤ Increase preload by 10 ft-lbs"
+            "➤ Increase preload by 10 ft-lbs",
+            "➤ Lower rear toe out 0.05\""
           ],
           "severe": [
             "➤ Add 3 clicks RR HS rebound",
             "➤ Raise RR ride height by 0.3\"",
-            "➤ Increase preload by 15 ft-lbs"
+            "➤ Increase preload by 15 ft-lbs",
+            "➤ Raise crossweight by 1%"
           ]
         },
         "Tight on exit": {
@@ -63,63 +106,24 @@
           "moderate": [
             "➤ Lower RR ride height by 0.2\"",
             "➤ Increase RR camber by 0.4°",
-            "➤ Lower RR tire pressure by 1.0 psi"
+            "➤ Lower RR tire pressure by 1.0 psi",
+            "➤ Add toe out 0.05\" to RR"
           ],
           "severe": [
             "➤ Lower RR ride height by 0.3\"",
             "➤ Increase RR camber by 0.6°",
-            "➤ Lower RR tire pressure by 1.5 psi"
+            "➤ Lower RR tire pressure by 1.5 psi",
+            "➤ Soften RR bump by 1 click"
           ]
         }
       }
     },
-    "T2": { "rules": {
-      "Loose on entry": {
-        "moderate": ["➤ Add 2 clicks RF HS rebound", "➤ Add front spring split of +200 lb/in"]
-      },
-      "Tight mid-corner": {
-        "moderate": ["➤ Lower RF spring 100 lb/in", "➤ Lower tire pressures RF/RR by 0.5 psi"]
-      }
-    }},
-    "T3": { "rules": {
-      "Loose mid-corner": {
-        "moderate": ["➤ Soften LR compression by 1 click", "➤ Raise crossweight by 0.3%"]
-      },
-      "Tight on exit": {
-        "severe": ["➤ Lower RR ride height 0.3\"", "➤ Add RR toe out 0.1\""]
-      }
-    }},
-    "T4": { "rules": {
-      "Loose on entry": {
-        "moderate": ["➤ Increase preload by 5 ft-lbs", "➤ Soften RF bump by 1 click"]
-      },
-      "Tight mid-corner": {
-        "moderate": ["➤ Raise LF ride height 0.1\"", "➤ Reduce LF spring by 100 lb/in"]
-      }
-    }},
-    "T5": { "rules": {
-      "Loose mid-corner": {
-        "moderate": ["➤ Add 1 click LR rebound", "➤ Raise LR ride height 0.1\""]
-      },
-      "Tight on entry": {
-        "moderate": ["➤ Lower nose weight 0.5%", "➤ Add RF camber +0.3°"]
-      }
-    }},
-    "T6": { "rules": {
-      "Loose on exit": {
-        "moderate": ["➤ Increase RR rebound 2 clicks", "➤ Add preload 10 ft-lbs"]
-      },
-      "Tight mid-corner": {
-        "moderate": ["➤ Lower RF tire pressure 0.5 psi", "➤ Reduce RF spring rate 100 lb/in"]
-      }
-    }},
-    "T7": { "rules": {
-      "Loose on entry": {
-        "moderate": ["➤ Add 1 click RF LS bump", "➤ Increase crossweight 0.5%"]
-      },
-      "Tight on exit": {
-        "moderate": ["➤ Reduce preload 10 ft-lbs", "➤ Add RR rebound 1 click"]
-      }
-    }}
+    "T2": { "rules": {} },
+    "T3": { "rules": {} },
+    "T4": { "rules": {} },
+    "T5": { "rules": {} },
+    "T6": { "rules": {} },
+    "T7": { "rules": {} }
   }
 }
+

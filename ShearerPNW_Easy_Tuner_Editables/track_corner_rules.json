@@ -1,93 +1,125 @@
 {
   "Watkins Glen International": {
+    "baseline_temp": 85,
     "T1": {
-      "corner_name": "Turn 1 (Right-hander)",
-      "banking_deg": 6,
-      "surface": "Asphalt",
       "rules": {
-        "Loose on entry": [
-          "➤ Lower brake bias 1–2%",
-          "➤ Add 1 click RF rebound"
-        ],
-        "Loose mid-corner": [
-          "➤ Add 1 click RR LS rebound",
-          "➤ Increase crossweight by 0.3%"
-        ],
-        "Loose on exit": [
-          "➤ Add 1 click RR HS rebound",
-          "➤ Raise RR ride height 0.1\""
-        ]
+        "Loose on entry": {
+          "slight": [
+            "➤ Add 1 click RF LS rebound",
+            "➤ Increase RF tire pressure by 0.5 psi",
+            "➤ Raise crossweight by 0.2%"
+          ],
+          "moderate": [
+            "➤ Add 2 clicks RF LS rebound",
+            "➤ Increase RF tire pressure by 1.0 psi",
+            "➤ Raise crossweight by 0.5%"
+          ],
+          "severe": [
+            "➤ Add 3 clicks RF LS rebound",
+            "➤ Increase RF tire pressure by 1.5 psi",
+            "➤ Raise crossweight by 0.8%"
+          ]
+        },
+        "Tight on entry": {
+          "slight": [
+            "➤ Reduce LF rebound by 1 click",
+            "➤ Lower RF tire pressure by 0.5 psi",
+            "➤ Decrease front brake bias by 1%"
+          ],
+          "moderate": [
+            "➤ Reduce LF rebound by 2 clicks",
+            "➤ Lower RF tire pressure by 1.0 psi",
+            "➤ Decrease front brake bias by 2%"
+          ],
+          "severe": [
+            "➤ Reduce LF rebound by 3 clicks",
+            "➤ Lower RF tire pressure by 1.5 psi",
+            "➤ Decrease front brake bias by 3%"
+          ]
+        },
+        "Loose on exit": {
+          "slight": [
+            "➤ Add 1 click RR HS rebound",
+            "➤ Raise RR ride height by 0.1\"",
+            "➤ Increase preload by 5 ft-lbs"
+          ],
+          "moderate": [
+            "➤ Add 2 clicks RR HS rebound",
+            "➤ Raise RR ride height by 0.2\"",
+            "➤ Increase preload by 10 ft-lbs"
+          ],
+          "severe": [
+            "➤ Add 3 clicks RR HS rebound",
+            "➤ Raise RR ride height by 0.3\"",
+            "➤ Increase preload by 15 ft-lbs"
+          ]
+        },
+        "Tight on exit": {
+          "slight": [
+            "➤ Lower RR ride height by 0.1\"",
+            "➤ Increase RR camber by 0.2°",
+            "➤ Lower RR tire pressure by 0.5 psi"
+          ],
+          "moderate": [
+            "➤ Lower RR ride height by 0.2\"",
+            "➤ Increase RR camber by 0.4°",
+            "➤ Lower RR tire pressure by 1.0 psi"
+          ],
+          "severe": [
+            "➤ Lower RR ride height by 0.3\"",
+            "➤ Increase RR camber by 0.6°",
+            "➤ Lower RR tire pressure by 1.5 psi"
+          ]
+        }
       }
     },
-    "T2": {
-      "corner_name": "Turn 2 (Esses Up)",
-      "banking_deg": 4,
-      "surface": "Asphalt",
-      "rules": {
-        "Unstable mid-corner": [
-          "➤ Stiffen front springs",
-          "➤ Increase front rebound 1 click"
-        ]
+    "T2": { "rules": {
+      "Loose on entry": {
+        "moderate": ["➤ Add 2 clicks RF HS rebound", "➤ Add front spring split of +200 lb/in"]
+      },
+      "Tight mid-corner": {
+        "moderate": ["➤ Lower RF spring 100 lb/in", "➤ Lower tire pressures RF/RR by 0.5 psi"]
       }
-    },
-    "T3": {
-      "corner_name": "Turn 3 (Esses Exit)",
-      "banking_deg": 4,
-      "surface": "Asphalt",
-      "rules": {
-        "Loose on exit": [
-          "➤ Add preload (5–10 ft-lbs)",
-          "➤ Reduce rear toe-in slightly"
-        ]
+    }},
+    "T3": { "rules": {
+      "Loose mid-corner": {
+        "moderate": ["➤ Soften LR compression by 1 click", "➤ Raise crossweight by 0.3%"]
+      },
+      "Tight on exit": {
+        "severe": ["➤ Lower RR ride height 0.3\"", "➤ Add RR toe out 0.1\""]
       }
-    },
-    "T5": {
-      "corner_name": "Turn 5 (Bus Stop Entry)",
-      "banking_deg": 2,
-      "surface": "Asphalt",
-      "rules": {
-        "Loose on entry": [
-          "➤ Soften front ARB",
-          "➤ Add 1 click RR compression"
-        ],
-        "Unstable under braking": [
-          "➤ Lower rear brake pressure",
-          "➤ Add preload to diff"
-        ]
+    }},
+    "T4": { "rules": {
+      "Loose on entry": {
+        "moderate": ["➤ Increase preload by 5 ft-lbs", "➤ Soften RF bump by 1 click"]
+      },
+      "Tight mid-corner": {
+        "moderate": ["➤ Raise LF ride height 0.1\"", "➤ Reduce LF spring by 100 lb/in"]
       }
-    },
-    "T6": {
-      "corner_name": "Turn 6 (Carousel)",
-      "banking_deg": 6,
-      "surface": "Asphalt",
-      "rules": {
-        "Loose on entry": [
-          "➤ Increase RF rebound 1 click"
-        ],
-        "Loose mid-corner": [
-          "➤ Add 1 click RR LS rebound"
-        ],
-        "Loose on exit": [
-          "➤ Add 1 click RR HS rebound",
-          "➤ Raise RR ride height 0.1\"",
-          "➤ Increase preload"
-        ]
+    }},
+    "T5": { "rules": {
+      "Loose mid-corner": {
+        "moderate": ["➤ Add 1 click LR rebound", "➤ Raise LR ride height 0.1\""]
+      },
+      "Tight on entry": {
+        "moderate": ["➤ Lower nose weight 0.5%", "➤ Add RF camber +0.3°"]
       }
-    },
-    "T7": {
-      "corner_name": "Turn 7 (Final Corner)",
-      "banking_deg": 5,
-      "surface": "Asphalt",
-      "rules": {
-        "Loose on exit": [
-          "➤ Soften LR spring by 50 lbs",
-          "➤ Increase crossweight"
-        ],
-        "Tight on exit": [
-          "➤ Soften RR rebound",
-          "➤ Reduce preload 5 ft-lbs"
-        ]
+    }},
+    "T6": { "rules": {
+      "Loose on exit": {
+        "moderate": ["➤ Increase RR rebound 2 clicks", "➤ Add preload 10 ft-lbs"]
+      },
+      "Tight mid-corner": {
+        "moderate": ["➤ Lower RF tire pressure 0.5 psi", "➤ Reduce RF spring rate 100 lb/in"]
       }
-    }
+    }},
+    "T7": { "rules": {
+      "Loose on entry": {
+        "moderate": ["➤ Add 1 click RF LS bump", "➤ Increase crossweight 0.5%"]
+      },
+      "Tight on exit": {
+        "moderate": ["➤ Reduce preload 10 ft-lbs", "➤ Add RR rebound 1 click"]
+      }
+    }}
   }
 }

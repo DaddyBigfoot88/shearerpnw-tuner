@@ -119,5 +119,15 @@ if os.path.exists(editable_path):
 else:
     st.info("No car_profiles.json found.")
 
+# === 📊 Telemetry Analysis (Experimental) ===
+st.markdown("## 📊 Telemetry Analysis (Experimental)")
+
+uploaded_ibt = st.file_uploader("Upload your iRacing Telemetry (.ibt) file", type=["ibt"])
+if uploaded_ibt:
+    st.success("IBT file uploaded. Parsing coming soon.")
+    st.info("Once parsing is enabled, you’ll see throttle, brake, ride height, shock velocity, and more plotted here.")
+else:
+    st.caption("Upload a .ibt file to visualize key telemetry signals for tuning.")
+
 st.markdown("---")
 st.caption("ShearerPNW Easy Tuner – v1.1 (Manual Entry + Corner Feedback)")

@@ -1,9 +1,23 @@
 {
   "meta": {
-    "version": "1.0"
+    "version": "1.1"
   },
   "defaults": {
     "baseline_temp_f": 85
+  },
+  "run_type_scaling": {
+    "Practice": {
+      "mult": 0.75,
+      "note": "smaller test steps"
+    },
+    "Qualifying": {
+      "mult": 1.15,
+      "note": "a bit more aggressive"
+    },
+    "Race": {
+      "mult": 1.0,
+      "note": "normal"
+    }
   },
   "feel_key_map": {
     "Loose on entry": "loose_entry",

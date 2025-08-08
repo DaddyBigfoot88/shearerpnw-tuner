@@ -1,0 +1,26 @@
+
+{
+  "Watkins Glen International (Cup)": {
+    "id": "watkins_glen_cup",
+    "corners": [
+      {"name":"T1","dir":"R","bank_deg":7.0,"angle_deg":90},
+      {"name":"Esses (T2-4)","dir":"R","bank_deg":6.0,"angle_deg":45},
+      {"name":"Bus Stop (Inner Loop)","dir":"M","bank_deg":0.0,"angle_deg":80},
+      {"name":"Outer Loop (T5)","dir":"R","bank_deg":9.0,"angle_deg":180},
+      {"name":"T6 (Chute)","dir":"R","bank_deg":5.0,"angle_deg":70},
+      {"name":"T7 (Final Corner)","dir":"R","bank_deg":6.0,"angle_deg":100}
+    ]
+  },
+  "Charlotte Motor Speedway Roval": {
+    "id": "charlotte_roval",
+    "corners": [
+      {"name":"Infield T1","dir":"L","bank_deg":2.0,"angle_deg":70},
+      {"name":"Infield T2","dir":"L","bank_deg":2.0,"angle_deg":60},
+      {"name":"Infield T3","dir":"R","bank_deg":2.0,"angle_deg":90},
+      {"name":"NASCAR T1-2","dir":"L","bank_deg":24.0,"angle_deg":180},
+      {"name":"Backstretch Chicane","dir":"M","bank_deg":0.0,"angle_deg":90},
+      {"name":"NASCAR T3-4","dir":"L","bank_deg":24.0,"angle_deg":180},
+      {"name":"Frontstretch Chicane","dir":"M","bank_deg":0.0,"angle_deg":90}
+    ]
+  }
+}

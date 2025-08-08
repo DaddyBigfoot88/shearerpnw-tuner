@@ -1,4 +1,4 @@
-# Setup Coach – JSON-driven rules + corner metadata (left/right, banking, angle) + temp comp (CLEAN)
+# Setup Coach – JSON-driven rules + corner metadata (left/right, banking, angle) + temp comp + run-type scaling (TOP CONTROLS)
 import json, pathlib, re
 import streamlit as st
 
@@ -45,6 +45,13 @@ setup_rules = load_json(SETUP_RULES_PATH, {
 ALLOWED = setup_rules.get('allowed_parameters', {})
 LIMITS  = setup_rules.get('limits', {})
 
+# Run-type scaling defaults (can be overridden in coach_rules.json)
+RUN_SCALE = coach_rules.get('run_type_scaling', {
+    'Practice':   {'mult': 0.75, 'note': 'smaller test steps'},
+    'Qualifying': {'mult': 1.15, 'note': 'a bit more aggressive'},
+    'Race':       {'mult': 1.0,  'note': 'normal'}
+})
+
 def sev_bucket(n):
     if n <= 3:
         return 'slight'
@@ -80,14 +87,21 @@ def step_for_param(pname):
     return 1.0
 
 def scale_in_text(txt, factor):
+    import math as _m
     m = re.search(r'([+-]?\d+(\.\d+)?)', txt)
     if not m:
         return txt
     param = txt.split(':',1)[0]
     step  = step_for_param(param)
     val   = float(m.group(1)) * float(factor)
+    # snap to step respecting float fuzz
     snapped = round(val / step) * step
-    new_num = str(snapped)
+    snapped = float('{:.6f}'.format(snapped))
+    # strip trailing .0 if integer-ish
+    if abs(snapped - int(snapped)) < 1e-9:
+        new_num = str(int(snapped))
+    else:
+        new_num = str(snapped)
     s, e = m.span(1)
     return txt[:s] + new_num + txt[e:]
 
@@ -107,14 +121,19 @@ def ensure_allowed(d):
                 out[cat].append(line)
     return out
 
-# Sidebar
-with st.sidebar:
+# === TOP CONTROLS (was sidebar) ===
+st.markdown('### Session')
+c_track, c_run = st.columns([3, 2])
+
+with c_track:
     track_names = sorted(list(tracks_meta.keys())) if tracks_meta else ['Unknown Track']
     if 'Watkins Glen International (Cup)' in track_names:
         idx = track_names.index('Watkins Glen International (Cup)')
     else:
         idx = 0
     track_pick = st.selectbox('Track', track_names, index=idx)
+
+with c_run:
     run_type = st.radio('Run type', ['Practice','Qualifying','Race'], index=0, horizontal=True)
 
 track_obj   = tracks_meta.get(track_pick, {'corners':[{'name':'T1','dir':'M','bank_deg':0,'angle_deg':90}]})
@@ -204,13 +223,18 @@ if btn:
     plan = {'tires': [], 'chassis': [], 'suspension': [], 'rear_end': []}
     findings = []
 
+    # selected run-type multiplier
+    run_mult = float(RUN_SCALE.get(run_type, {}).get('mult', 1.0))
+
     # temperature block
     tblock, tdiff, tsteps = apply_temp_comp(baseline_temp, current_temp)
+    tblock = scale_block(tblock, run_mult)   # scale by run type
     tblock = ensure_allowed(tblock)
     for k, v in tblock.items():
         plan[k].extend(v)
     if tsteps > 0:
         findings.append('Temperature: {}°F {} than baseline (x{})'.format(abs(tdiff), 'hotter' if tdiff>0 else 'cooler', tsteps))
+    findings.append('Run type: {} (x{})'.format(run_type, run_mult))
 
     # per-corner rules
     for meta in corner_meta:
@@ -227,6 +251,7 @@ if btn:
 
         factor = bank_angle_factor(float(meta.get('bank_deg',0)), float(meta.get('angle_deg',90)))
         sb = scale_block(sb, factor)
+        sb = scale_block(sb, run_mult)   # also scale by run type
 
         if str(meta.get('dir','M')).upper().startswith('R'):
             sb = mirror_sides(sb)

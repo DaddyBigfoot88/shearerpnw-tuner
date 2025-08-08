@@ -1,36 +1,39 @@
 
-import json, math, os, pathlib, tempfile
+import io, json, math, os, pathlib, tempfile
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
+from PIL import Image
 
 st.set_page_config(layout="wide")
 st.title("📊 Telemetry Viewer (CSV & IBT)")
-st.caption("Upload a CSV or raw iRacing .ibt. New: heatmap, tabs, user flags go into the ChatGPT export.")
+st.caption("Upload CSV or raw iRacing .ibt. Track map click-to-flag. Suggestions are OPT-IN only.")
 
-CHATGPT_HEADER = """(Just paste everything below into ChatGPT and hit Enter.)
+# ===== ChatGPT export header (no suggestions unless opt-in + has problem flags) =====
+CHATGPT_HEADER = '''(Just paste everything below into ChatGPT and hit Enter.)
 
 === CHATGPT SETUP COACH INSTRUCTIONS (PASTE THIS WHOLE BLOCK) ===
-You are a NASCAR Next Gen setup coach. Analyze the telemetry summary and give setup changes.
+You are a NASCAR Next Gen setup coach.
 
-Rules you must follow:
+IMPORTANT: Only provide setup suggestions if BOTH conditions are true:
+- generate_suggestions == true
+- There is at least one flag with is_problem == true (either distance flags or map flags).
+
+If the conditions are not met, only acknowledge the data was received and stop.
+
+When suggestions are allowed, follow these rules:
 - Use exact, garage-style outputs grouped by Tires, Chassis, Suspension, Rear End.
-- Shocks: 0–10 clicks only. Tire pressures: change in 0.5 psi steps. Diff preload: 0–75 ft-lbs. LF caster ≥ +8.0°.
+- Shocks: 0-10 clicks only. Tire pressures: change in 0.5 psi steps. Diff preload: 0-75 ft-lbs. LF caster >= +8.0 degrees.
 - If a suggested change conflicts with limits, cap it and say so.
-- If track temp is lower than baseline, bias pressures down ~0.5 psi per 10–15°F; higher temps bias up. Then fine-tune by tire edge temps.
+- If track temp is lower than baseline, bias pressures down ~0.5 psi per 10-15 F; higher temps bias up. Then fine-tune by tire edge temps.
 - Keep tips short. No fluff.
 
-Output format:
+Output format (only when suggestions are allowed):
 1) Key Findings (one line per corner)
 2) Setup Changes (garage format, with units and click counts)
 3) Why This Helps (one short line each)
 4) Next Lap Checklist (what to feel for)
-
-CAR & SESSION CONTEXT:
-- Car: NASCAR Next Gen
-- Session type: from JSON
-- Track: from JSON
 
 OK—here is the data:
 
@@ -38,9 +41,9 @@ OK—here is the data:
 {{TELEMETRY_JSON_PASTE_HERE}}
 ```
 
-End of data. Now give setup changes.
+End of data.
 === END INSTRUCTIONS ===
-"""
+'''
 
 DEFAULT_WGI_SEGMENTS = {
     "T1": [0.02, 0.10],
@@ -81,11 +84,12 @@ def build_chatgpt_export(summary_dict):
             (k, round_half_safe(v)) for k, v in pe.items()
         ) if v is not None}
 
-    if "user_flags" in summary_dict:
-        for f in summary_dict["user_flags"]:
-            for k in ("start_pct","end_pct"):
+    # round map coords
+    if "user_flags_map" in summary_dict:
+        for f in summary_dict["user_flags_map"]:
+            for k in ("x_norm","y_norm"):
                 try:
-                    f[k] = round(float(f.get(k, 0.0)), 3)
+                    f[k] = round(float(f.get(k, 0.0)), 4)
                 except Exception:
                     f[k] = None
 
@@ -182,6 +186,7 @@ def load_ibt_to_df(uploaded_file):
         try: os.unlink(tmp_path)
         except Exception: pass
 
+# ===== Sidebar =====
 with st.sidebar:
     up = st.file_uploader("Upload telemetry (.csv or .ibt)", type=["csv","ibt"])
     track = st.selectbox("Track", ["Watkins Glen International"], index=0)
@@ -196,7 +201,7 @@ with st.sidebar:
     run_type = st.radio("Run type", ["Qualifying","Short Run","Long Run"], index=1)
 
 if not up:
-    st.info("Upload a CSV or IBT with at least Speed, Throttle, and Brake. (Lap/LapDistPct optional; we’ll synthesize if missing)")
+    st.info("Upload a CSV or IBT with at least Speed, Throttle, and Brake. (Lap/LapDistPct optional; we will synthesize if missing)")
     st.stop()
 
 suffix = pathlib.Path(up.name).suffix.lower()
@@ -217,12 +222,85 @@ else:
 if "Lap" not in df.columns: df["Lap"] = 1
 laps = sorted(pd.unique(df["Lap"]).tolist())
 
-if "user_flags" not in st.session_state: st.session_state.user_flags = []
+# ===== State =====
+if "user_flags" not in st.session_state: st.session_state.user_flags = []           # distance-based (LapDistPct ranges)
+if "user_flags_map" not in st.session_state: st.session_state.user_flags_map = []   # image-based points
+if "click_buffer" not in st.session_state: st.session_state.click_buffer = []
 
-tab_overview, tab_stb, tab_shocks, tab_all, tab_flags = st.tabs(
-    ["Overview (Heatmap)", "Speed/Throttle/Brake", "Shocks & Heights", "All Channels", "Flags & Export"]
+# ===== Tabs =====
+tab_map, tab_overview, tab_stb, tab_shocks, tab_all, tab_flags = st.tabs(
+    ["Track Map (Click)", "Overview (Heatmap)", "Speed/Throttle/Brake", "Shocks & Heights", "All Channels", "Flags & Export"]
 )
 
+# ---------- Track Map (Click) ----------
+with tab_map:
+    st.subheader("Track Map (click to drop problem markers)")
+    left, right = st.columns([3,2])
+
+    with left:
+        uploaded_map = st.file_uploader("Optional: Upload a custom track map image (PNG/JPG)", type=["png","jpg","jpeg"], key="map_up")
+        if uploaded_map is not None:
+            image = Image.open(uploaded_map).convert("RGB")
+        else:
+            try:
+                image = Image.open("assets/track_map_wgi.png").convert("RGB")
+            except Exception:
+                st.error("Missing assets/track_map_wgi.png. Add a PNG track map to assets/.")
+                image = None
+
+        if image is not None:
+            w, h = image.size
+            figm = go.Figure()
+            figm.add_layout_image(dict(source=image, xref="x", yref="y", x=0, y=h, sizex=w, sizey=h, sizing="stretch", layer="below"))
+            figm.update_xaxes(visible=False, range=[0, w])
+            figm.update_yaxes(visible=False, range=[0, h], scaleanchor="x", scaleratio=1, autorange="reversed")
+            if st.session_state.user_flags_map:
+                xs = [f["x_px"] for f in st.session_state.user_flags_map]
+                ys = [f["y_px"] for f in st.session_state.user_flags_map]
+                names = [f.get("type","Flag") for f in st.session_state.user_flags_map]
+                figm.add_trace(go.Scatter(x=xs, y=ys, mode="markers+text", text=names, textposition="top center", name="Flags"))
+            figm.update_layout(title="Click on the map to add a marker", margin=dict(l=0,r=0,t=30,b=0))
+
+            with st.expander("Click options"):
+                st.caption("Clicks place a point. We will store normalized coords (x/W, y/H).")
+                flag_type = st.selectbox("Flag type", ["Loose on entry","Loose mid","Loose on exit","Tight on entry","Tight mid","Tight on exit","Other"], key="map_flag_type")
+                note = st.text_input("Note (optional)", "", key="map_flag_note")
+                is_problem = st.checkbox("Mark as problem", value=True, key="map_is_problem")
+
+            try:
+                from streamlit_plotly_events import plotly_events
+                clicks = plotly_events(figm, click_event=True, select_event=False, hover_event=False, key="map_clicks")
+                if clicks:
+                    x = float(clicks[-1]["x"]); y = float(clicks[-1]["y"])
+                    x = min(max(x, 0.0), w); y = min(max(y, 0.0), h)
+                    st.session_state.user_flags_map.append({
+                        "x_px": x, "y_px": y,
+                        "x_norm": x/float(w), "y_norm": y/float(h),
+                        "type": st.session_state.map_flag_type,
+                        "note": st.session_state.map_flag_note,
+                        "is_problem": bool(st.session_state.map_is_problem)
+                    })
+                    st.success(f"Added map flag at ({x:.0f}, {y:.0f}).")
+                    figm.add_trace(go.Scatter(x=[x], y=[y], mode="markers+text", text=[st.session_state.map_flag_type], textposition="top center", name="Flag"))
+                    figm.update_layout(transition_duration=0)
+                    st.plotly_chart(figm, use_container_width=True)
+                else:
+                    st.plotly_chart(figm, use_container_width=True)
+            except Exception as e:
+                st.error("To enable map clicks, ensure streamlit-plotly-events is installed (requirements.txt).")
+                st.caption(f"Details: {e}")
+
+    with right:
+        st.write("Current map flags:")
+        if st.session_state.user_flags_map:
+            st.dataframe(pd.DataFrame(st.session_state.user_flags_map), use_container_width=True, height=380)
+        else:
+            st.info("No map flags yet. Click on the image to add some.")
+        if st.button("🧹 Clear map flags"):
+            st.session_state.user_flags_map = []
+            st.info("Map flags cleared.")
+
+# ---------- Overview (Heatmap) ----------
 with tab_overview:
     st.subheader("Track Heatmap (Whole Run)")
     bins = np.linspace(0.0, 1.0, 201)
@@ -236,10 +314,11 @@ with tab_overview:
 
     z = np.vstack([agg["speed"].values, agg["throttle"].values, agg["brake"].values])
     fig = go.Figure(data=go.Heatmap(z=z, x=centers, y=["Speed","Throttle","Brake"], coloraxis="coloraxis"))
-    fig.update_layout(coloraxis=dict(colorbar=dict(title="Value")), xaxis_title="LapDistPct (0 → 1)", yaxis_title="", title="Whole-Run Heatmap (avg per distance bin)")
+    fig.update_layout(coloraxis=dict(colorbar=dict(title="Value")), xaxis_title="LapDistPct (0 to 1)", yaxis_title="", title="Whole-Run Heatmap (avg per distance bin)")
     add_flag_rects(fig, st.session_state.user_flags); shaded_corners(fig, segs)
     st.plotly_chart(fig, use_container_width=True)
 
+# ---------- STB (Speed/Throttle/Brake) ----------
 with tab_stb:
     st.subheader("Speed / Throttle / Brake")
     if view_mode == "Per lap":
@@ -253,9 +332,10 @@ with tab_stb:
         if col in plot_df.columns:
             fig1.add_trace(go.Scatter(x=plot_df["LapDistPct"], y=plot_df[col], mode="lines", name=name))
     shaded_corners(fig1, segs); add_flag_rects(fig1, st.session_state.user_flags)
-    fig1.update_layout(title=f"{view_mode} – STB vs LapDistPct", xaxis_title="LapDistPct", yaxis_title="Value")
+    fig1.update_layout(title=f"{view_mode} - STB vs LapDistPct", xaxis_title="LapDistPct", yaxis_title="Value")
     st.plotly_chart(fig1, use_container_width=True)
 
+# ---------- Shocks & Heights ----------
 with tab_shocks:
     st.subheader("Shocks & Ride Heights")
     if view_mode == "Per lap":
@@ -272,9 +352,10 @@ with tab_shocks:
             figx = go.Figure()
             figx.add_trace(go.Scatter(x=pdf["LapDistPct"], y=pdf[c], mode="lines", name=c))
             shaded_corners(figx, segs); add_flag_rects(figx, st.session_state.user_flags)
-            figx.update_layout(title=f"{view_mode} – {c} vs LapDistPct", xaxis_title="LapDistPct", yaxis_title=c)
+            figx.update_layout(title=f"{view_mode} - {c} vs LapDistPct", xaxis_title="LapDistPct", yaxis_title=c)
             st.plotly_chart(figx, use_container_width=True)
 
+# ---------- All Channels ----------
 with tab_all:
     st.subheader("Graph All Data (pick columns)")
     numeric_cols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c]) and c not in ("bin",)]
@@ -292,13 +373,14 @@ with tab_all:
             if c in p3.columns:
                 figA.add_trace(go.Scatter(x=p3["LapDistPct"], y=p3[c], mode="lines", name=c))
         shaded_corners(figA, segs); add_flag_rects(figA, st.session_state.user_flags)
-        figA.update_layout(title=f"{view_mode} – selected columns vs LapDistPct", xaxis_title="LapDistPct", yaxis_title="Value")
+        figA.update_layout(title=f"{view_mode} - selected columns vs LapDistPct", xaxis_title="LapDistPct", yaxis_title="Value")
         st.plotly_chart(figA, use_container_width=True)
     st.dataframe(df.head(500), use_container_width=True)
 
+# ---------- Flags & Export ----------
 with tab_flags:
-    st.subheader("Flag problem spots (goes into export)")
-    col1, col2, col3, col4 = st.columns([1,1,1,2])
+    st.subheader("Distance Flags (ranges)")
+    col1, col2, col3, col4, col5 = st.columns([1,1,1,1,2])
     with col1:
         start_pct = st.number_input("Start %", min_value=0.0, max_value=1.0, value=0.10, step=0.005, format="%.3f")
     with col2:
@@ -306,43 +388,28 @@ with tab_flags:
     with col3:
         flag_type = st.selectbox("Type", ["Loose on entry","Loose mid","Loose on exit","Tight on entry","Tight mid","Tight on exit","Other"])
     with col4:
-        note = st.text_input("Quick note (optional)", value="")
+        is_problem = st.checkbox("Problem", value=True)
+    with col5:
+        note = st.text_input("Note (optional)", value="")
 
-    colA, colB = st.columns([1,1])
-    with colA:
-        if st.button("➕ Add Flag"):
-            if end_pct <= start_pct:
-                st.warning("End must be greater than Start.")
-            else:
-                st.session_state.user_flags.append({"start_pct": float(start_pct), "end_pct": float(end_pct), "type": flag_type, "note": note})
-                st.success("Flag added.")
-    with colB:
-        if st.button("🧹 Clear All Flags"):
-            st.session_state.user_flags = []
-            st.info("Flags cleared.")
+    add = st.button("Add distance flag")
+    clear = st.button("Clear distance flags")
+    if add:
+        if end_pct <= start_pct: st.warning("End must be greater than Start.")
+        else:
+            st.session_state.user_flags.append({"start_pct": float(start_pct), "end_pct": float(end_pct), "type": flag_type, "note": note, "is_problem": bool(is_problem)})
+            st.success("Distance flag added.")
+    if clear:
+        st.session_state.user_flags = []; st.info("Distance flags cleared.")
 
     if st.session_state.user_flags:
-        st.write("Current flags:")
-        st.dataframe(pd.DataFrame(st.session_state.user_flags))
+        st.write("Current distance flags:")
+        st.dataframe(pd.DataFrame(st.session_state.user_flags), use_container_width=True)
 
-    def simple_findings(df_all, segments):
-        out = []
-        for corner, (a,b) in segments.items():
-            seg = df_all[(df_all["LapDistPct"] >= a) & (df_all["LapDistPct"] <= b)]
-            if len(seg) < 10:
-                out.append({"corner": corner, "issue": "—", "severity": ""}); continue
-            throttle = seg["Throttle"].mean() if "Throttle" in seg else np.nan
-            speed_drop = (seg["Speed"].max() - seg["Speed"].min()) if "Speed" in seg else np.nan
-            issue, sev = "—", ""
-            if pd.notna(throttle) and pd.notna(speed_drop):
-                if throttle > 70 and speed_drop < 5: issue, sev = "Loose on exit", "slight"
-                elif speed_drop > 10: issue, sev = "Tight on entry", "slight"
-            out.append({"corner": corner, "issue": issue, "severity": sev})
-        return pd.DataFrame(out)
-
-    findings_df = simple_findings(df, segs)
-    st.subheader("Corner findings (quick heuristic)")
-    st.dataframe(findings_df, use_container_width=True)
+    st.markdown("---")
+    st.subheader("Export to ChatGPT")
+    generate_suggestions = st.checkbox("Generate setup suggestions (opt-in)", value=False,
+                                       help="If off, ChatGPT will just acknowledge the data and stop.")
 
     summary = {
         "car": "NASCAR Next Gen",
@@ -352,13 +419,13 @@ with tab_flags:
                        "baseline_temp_F": 85},
         "pressures_ending_psi": {k: float(df[k].iloc[-1]) for k in ["LFpressure","RFpressure","LRpressure","RRpressure"] if k in df.columns},
         "ride_heights_in": {k: float(df[k].median()) for k in ["CFSRrideHeight","LFrideHeight","RFrideHeight","LRrideHeight","RRrideHeight"] if k in df.columns},
-        "corner_findings": findings_df.to_dict(orient="records"),
+        "corner_findings": [],
         "user_flags": st.session_state.user_flags,
+        "user_flags_map": st.session_state.user_flags_map,
+        "generate_suggestions": bool(generate_suggestions)
     }
 
     export_text = build_chatgpt_export(summary)
-    st.markdown("---")
-    st.subheader("Copy for ChatGPT")
     st.download_button("Download export (.txt)", data=export_text.encode("utf-8"),
                        file_name="chatgpt_export.txt", mime="text/plain")
     st.text_area("Preview", export_text, height=260)

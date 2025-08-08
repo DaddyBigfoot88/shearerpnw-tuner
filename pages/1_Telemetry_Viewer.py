@@ -1,12 +1,11 @@
+
 # Telemetry Viewer – NO AUTO FETCH, everything else unchanged
-import io, json, os, pathlib, tempfile, math, re, mimetypes, time
+import io, json, os, pathlib, tempfile, re, mimetypes
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 import streamlit as st
-from PIL import Image
-import requests
 
 st.set_page_config(layout="wide")
 st.title("Telemetry Viewer")
@@ -37,67 +36,7 @@ def save_tracks(tracks_obj):
         st.error(f"Failed to save tracks.json: {e}")
         return False
 
-ACCEPTABLE_LICENSES = {"public domain","cc0","cc-by","cc-by-sa","cc by","cc by-sa","cc-by 2.0","cc-by-sa 3.0","cc-by-sa 4.0"}
-
-# keep this helper, but we won't call it automatically
-def commons_search_image(query: str):
-    api = "https://commons.wikimedia.org/w/api.php"
-    params = {
-        "action": "query",
-        "format": "json",
-        "generator": "search",
-        "gsrsearch": query + " aerial OR satellite OR track map",
-        "gsrlimit": 10,
-        "prop": "imageinfo",
-        "iiprop": "url|extmetadata",
-        "iiurlwidth": 2000,
-        "origin": "*"
-    }
-    r = requests.get(api, params=params, timeout=30)
-    r.raise_for_status()
-    data = r.json()
-    if "query" not in data or "pages" not in data["query"]:
-        return None
-    pages = list(data["query"]["pages"].values())
-    for p in pages:
-        i = p.get("imageinfo", [{}])[0]
-        ext = i.get("extmetadata", {})
-        lic = (ext.get("LicenseShortName", {}).get("value","") or ext.get("License", {}).get("value","")).lower()
-        if any(k in lic for k in ACCEPTABLE_LICENSES):
-            return {
-                "title": p.get("title",""),
-                "url": i.get("url") or i.get("thumburl"),
-                "license": ext.get("LicenseShortName", {}).get("value") or ext.get("License", {}).get("value",""),
-                "artist": ext.get("Artist", {}).get("value","").strip(),
-                "source": "https://commons.wikimedia.org/wiki/" + p.get("title","").replace(" ", "_")
-            }
-    # fallback
-    p = pages[0]
-    i = p.get("imageinfo", [{}])[0]
-    return {
-        "title": p.get("title",""),
-        "url": i.get("url") or i.get("thumburl"),
-        "license": i.get("extmetadata", {}).get("LicenseShortName", {}).get("value",""),
-        "artist": i.get("extmetadata", {}).get("Artist", {}).get("value","").strip(),
-        "source": "https://commons.wikimedia.org/wiki/" + p.get("title","").replace(" ", "_")
-    }
-
-MIN_BYTES = 120_000  # files smaller than this are considered placeholders/too small
-
-# keep ensure_image but DO NOT call it automatically anymore
-def ensure_image(track_name: str, track_meta: dict, tracks_obj: dict, force=False):
-    local = track_meta.get("image")
-    if local and pathlib.Path(local).exists():
-        try:
-            size = pathlib.Path(local).stat().st_size
-            if size >= MIN_BYTES:
-                return local
-        except Exception:
-            pass
-    # no auto network fetch — just return local if it exists
-    return local if (local and pathlib.Path(local).exists()) else None
-
-# ---------- REMOVED: PREFETCH ON START ----------
+# ---------- NO AUTO FETCH ----------
 tracks = load_tracks()
 
 # Sidebar (unchanged)
@@ -111,11 +50,10 @@ with st.sidebar:
     show_all_table = st.checkbox("Show full raw table", value=False)
     run_type = st.radio("Run type", ["Practice","Qualifying","Race"], index=0, horizontal=True)
 
-# Track image (now local-only)
+# Track image (local-only)
 colA, colB = st.columns([1.2, 1.8])
 with colA:
     st.subheader("Track")
-    # DO NOT call ensure_image with network behavior; just display cached file
     img_path = track_info.get("image")
     if img_path and pathlib.Path(img_path).exists():
         st.image(img_path, use_container_width=True, caption=str(track_pick))
@@ -166,7 +104,8 @@ with colB:
                 if ibt is None: raise RuntimeError("pyirsdk.IBT class not found")
                 try:
                     if hasattr(ibt, "open"): ibt.open()
-                except Exception: pass
+                except Exception: 
+                    pass
                 want = ["Lap","LapDistPct","LapDist","Speed","Throttle","Brake","SteeringWheelAngle","YawRate"]
                 data = {}
                 for ch in want:
@@ -175,20 +114,26 @@ with colB:
                         try:
                             fn = getattr(ibt, getter); maybe = fn(ch)
                             if maybe is not None: arr = maybe; break
-                        except Exception: continue
-                    if arr is not None: data[ch] = arr
-                if not data: raise RuntimeError("No known channels found in IBT.")
+                        except Exception: 
+                            continue
+                    if arr is not None: 
+                        data[ch] = arr
+                if not data: 
+                    raise RuntimeError("No known channels found in IBT.")
                 df = pd.DataFrame(data).dropna(how="all")
                 for col in ("Throttle","Brake"):
                     if col in df.columns and df[col].max() <= 1.5:
                         df[col] = (df[col] * 100.0).clip(0,100)
                 if "LapDistPct" not in df.columns:
                     if "LapDist" in df.columns and df["LapDist"].max() > 0:
-                        if "Lap" not in df.columns: df["Lap"] = 1
-                        else: df["Lap"] = df["Lap"].fillna(method="ffill").fillna(1).astype(int)
+                        if "Lap" not in df.columns: 
+                            df["Lap"] = 1
+                        else: 
+                            df["Lap"] = df["Lap"].fillna(method="ffill").fillna(1).astype(int)
                         df["LapDistPct"] = df["LapDist"] / df.groupby("Lap")["LapDist"].transform("max").replace(0,1)
                     else:
-                        if "Lap" not in df.columns: df["Lap"] = 1
+                        if "Lap" not in df.columns: 
+                            df["Lap"] = 1
                         df["_idx"] = df.groupby("Lap").cumcount()
                         max_idx = df.groupby("Lap")["_idx"].transform("max").replace(0,1)
                         df["LapDistPct"] = df["_idx"] / max_idx
@@ -197,19 +142,24 @@ with colB:
                 st.error(f"IBT parse error: {e}")
             finally:
                 try:
-                    if 'ibt' in locals() and hasattr(ibt, "close"): ibt.close()
-                except Exception: pass
-                try: os.unlink(tmp_path)
-                except Exception: pass
+                    if 'ibt' in locals() and hasattr(ibt, "close"): 
+                        ibt.close()
+                except Exception: 
+                    pass
+                try: 
+                    os.unlink(tmp_path)
+                except Exception: 
+                    pass
 
     if df is not None:
         df, notes = coerce_min_columns(df)
-        if notes: st.warning("Synthesized columns: " + ", ".join(notes))
+        if notes: 
+            st.warning("Synthesized columns: " + ", ".join(notes))
         st.write(", ".join(list(df.columns)))
 
 # Graphs (distinct colors) — unchanged
 st.markdown("---")
-if show_charts and df is not None:
+if show_charts and 'df' in locals() and df is not None:
     st.subheader("Graphs (pick any numeric channels)")
     numeric_cols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
     if not numeric_cols:
@@ -256,7 +206,7 @@ if show_charts and df is not None:
             st.info("Pick at least one channel to plot.")
 
 # Full table (unchanged)
-if show_all_table and df is not None:
+if show_all_table and 'df' in locals() and df is not None:
     st.markdown("---")
     st.subheader("All data table (first 1,000 rows)")
     st.dataframe(df.head(1000), use_container_width=True)
@@ -324,7 +274,7 @@ if sup is not None:
     except Exception as e:
         st.error(f"Setup upload error: {e}")
 
-# Export block (unchanged)
+# Export block (unchanged logic)
 st.markdown("---")
 st.header("Export to ChatGPT (with rules, no auto suggestions)")
 generate_suggestions = st.checkbox("Allow setup suggestions (opt-in)", value=False)
@@ -336,7 +286,7 @@ if not rules_path.exists():
 else:
     setup_rules = json.loads(rules_path.read_text())
 
-    CHATGPT_HEADER = '''(Paste this whole block into ChatGPT and press Enter.)
+    CHATGPT_HEADER = """(Paste this whole block into ChatGPT and press Enter.)
 
 === CHATGPT SETUP COACH (TRACK-AWARE FEEDBACK) ===
 You are a NASCAR Next Gen setup coach.
@@ -374,4 +324,45 @@ OK—here is the data:
 corner_feedback_json = 
 ```json
 {{CORNER_FEEDBACK_JSON}}
+```
 
+setup_rules = 
+```json
+{{SETUP_RULES_JSON}}
+```
+
+setup_current = 
+```json
+{{SETUP_CURRENT_JSON}}
+```
+
+telemetry_columns_present = 
+```json
+{{TELEM_COLS_JSON}}
+```
+
+gates = {"generate_suggestions": {{GATE_GEN}}, "is_problem": {{GATE_PROB}}}
+
+End of data.
+=== END INSTRUCTIONS ===
+"""
+
+    telem_cols = list(df.columns) if (('df' in locals()) and (df is not None)) else []
+    export_text = (
+        CHATGPT_HEADER
+        .replace("{{TRACK_NAME}}", json.dumps(track_pick))
+        .replace("{{RUN_TYPE}}", json.dumps(run_type))
+        .replace("{{CORNER_LABELS_JSON}}", json.dumps(tracks.get(track_pick, {}).get("corners", []), indent=2))
+        .replace("{{CORNER_FEEDBACK_JSON}}", json.dumps(st.session_state.driver_feedback, indent=2))
+        .replace("{{SETUP_RULES_JSON}}", json.dumps(setup_rules, indent=2))
+        .replace("{{SETUP_CURRENT_JSON}}", json.dumps(st.session_state.setup_current, indent=2))
+        .replace("{{TELEM_COLS_JSON}}", json.dumps(telem_cols, indent=2))
+        .replace("{{GATE_GEN}}", "true" if generate_suggestions else "false")
+        .replace("{{GATE_PROB}}", "true" if is_problem else "false")
+    )
+
+    st.download_button("Download ChatGPT export (.txt)",
+                       data=export_text.encode("utf-8"),
+                       file_name="chatgpt_trackaware_export.txt",
+                       mime="text/plain")
+    st.text_area("Preview", export_text, height=360)

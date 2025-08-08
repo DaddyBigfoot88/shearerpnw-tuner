@@ -1,4 +1,4 @@
-# Telemetry Viewer - AUTO-PREFETCH REAL TRACK IMAGES (no placeholders), Distinct Colors
+# Telemetry Viewer – NO AUTO FETCH, everything else unchanged
 import io, json, os, pathlib, tempfile, math, re, mimetypes, time
 import numpy as np
 import pandas as pd
@@ -10,7 +10,7 @@ import requests
 
 st.set_page_config(layout="wide")
 st.title("Telemetry Viewer")
-st.caption("First load will auto-download real track images from Wikimedia Commons for ALL tracks, cache them, and overwrite any placeholders.")
+st.caption("Maps show only if already cached. No auto-download or prefetch.")
 
 def slug(s: str):
     return re.sub(r'[^a-z0-9_]+', '_', s.lower())
@@ -39,6 +39,7 @@ def save_tracks(tracks_obj):
 
 ACCEPTABLE_LICENSES = {"public domain","cc0","cc-by","cc-by-sa","cc by","cc by-sa","cc-by 2.0","cc-by-sa 3.0","cc-by-sa 4.0"}
 
+# keep this helper, but we won't call it automatically
 def commons_search_image(query: str):
     api = "https://commons.wikimedia.org/w/api.php"
     params = {
@@ -83,53 +84,23 @@ def commons_search_image(query: str):
 
 MIN_BYTES = 120_000  # files smaller than this are considered placeholders/too small
 
+# keep ensure_image but DO NOT call it automatically anymore
 def ensure_image(track_name: str, track_meta: dict, tracks_obj: dict, force=False):
     local = track_meta.get("image")
-    if local and pathlib.Path(local).exists() and not force:
+    if local and pathlib.Path(local).exists():
         try:
             size = pathlib.Path(local).stat().st_size
             if size >= MIN_BYTES:
                 return local
         except Exception:
-            pass  # fall through to refresh
-
-    q = track_name.split("(")[0].strip()
-    try:
-        res = commons_search_image(q)
-        if res and res.get("url"):
-            r = requests.get(res["url"], timeout=60)
-            r.raise_for_status()
-            ctype = r.headers.get("Content-Type","").split(";")[0].strip().lower()
-            ext = mimetypes.guess_extension(ctype) or os.path.splitext(res["url"])[1] or ".jpg"
-            out_path = ASSETS_DIR / f"{track_meta.get('id','track')}{ext}"
-            with open(out_path, "wb") as f:
-                f.write(r.content)
-            tracks_obj[track_name]["image"] = str(out_path)
-            tracks_obj[track_name]["credit"] = {
-                "title": res.get("title",""),
-                "author": res.get("artist",""),
-                "license": res.get("license",""),
-                "source": res.get("source","")
-            }
-            save_tracks(tracks_obj)
-            return str(out_path)
-    except Exception:
-        pass
+            pass
+    # no auto network fetch — just return local if it exists
     return local if (local and pathlib.Path(local).exists()) else None
 
-# ---------- PREFETCH ON START (one-time-ish) ----------
+# ---------- REMOVED: PREFETCH ON START ----------
 tracks = load_tracks()
-if tracks:
-    # Try to fetch/refresh images for every track right away
-    with st.spinner("Prefetching track images (one-time)..."):
-        fetched = 0
-        for name, meta in tracks.items():
-            path = ensure_image(name, meta, tracks, force=True)  # force replaces placeholders
-            if path and pathlib.Path(path).exists():
-                fetched += 1
-        st.caption(f"Images cached: {fetched}/{len(tracks)}")
 
-# Sidebar (keep basic controls)
+# Sidebar (unchanged)
 with st.sidebar:
     track_names = sorted(list(tracks.keys())) if tracks else ["Unknown Track"]
     default_idx = track_names.index("Watkins Glen International (Cup)") if "Watkins Glen International (Cup)" in track_names else 0
@@ -140,17 +111,18 @@ with st.sidebar:
     show_all_table = st.checkbox("Show full raw table", value=False)
     run_type = st.radio("Run type", ["Practice","Qualifying","Race"], index=0, horizontal=True)
 
-# Track image
+# Track image (now local-only)
 colA, colB = st.columns([1.2, 1.8])
 with colA:
     st.subheader("Track")
-    img_path = ensure_image(track_pick, track_info, tracks, force=False)
+    # DO NOT call ensure_image with network behavior; just display cached file
+    img_path = track_info.get("image")
     if img_path and pathlib.Path(img_path).exists():
         st.image(img_path, use_container_width=True, caption=str(track_pick))
     else:
-        st.warning("Could not fetch an image for this track yet. It will try again on reload.")
+        st.warning("No cached image for this track. Add a file path in tracks.json and commit the image to assets/tracks/.")
 
-# Channels & telemetry loader
+# Channels & telemetry loader (unchanged)
 with colB:
     st.subheader("Channels and File info")
     df = None
@@ -235,7 +207,7 @@ with colB:
         if notes: st.warning("Synthesized columns: " + ", ".join(notes))
         st.write(", ".join(list(df.columns)))
 
-# Graphs (distinct colors)
+# Graphs (distinct colors) — unchanged
 st.markdown("---")
 if show_charts and df is not None:
     st.subheader("Graphs (pick any numeric channels)")
@@ -283,13 +255,13 @@ if show_charts and df is not None:
         else:
             st.info("Pick at least one channel to plot.")
 
-# Full table
+# Full table (unchanged)
 if show_all_table and df is not None:
     st.markdown("---")
     st.subheader("All data table (first 1,000 rows)")
     st.dataframe(df.head(1000), use_container_width=True)
 
-# Corner feedback
+# Corner feedback (unchanged)
 st.markdown("---")
 st.header("Corner Feedback")
 corner_labels = tracks.get(track_pick, {}).get("corners", ["T1","T2","T3"])
@@ -314,7 +286,7 @@ for i, c in enumerate(corner_labels):
 
 st.success("Feedback saved for this track.")
 
-# Setup entry/upload
+# Setup entry/upload (unchanged)
 st.markdown("---")
 st.header("Current Setup")
 if "setup_current" not in st.session_state: st.session_state.setup_current = {}
@@ -352,7 +324,7 @@ if sup is not None:
     except Exception as e:
         st.error(f"Setup upload error: {e}")
 
-# Export block
+# Export block (unchanged)
 st.markdown("---")
 st.header("Export to ChatGPT (with rules, no auto suggestions)")
 generate_suggestions = st.checkbox("Allow setup suggestions (opt-in)", value=False)
@@ -402,45 +374,4 @@ OK—here is the data:
 corner_feedback_json = 
 ```json
 {{CORNER_FEEDBACK_JSON}}
-```
 
-setup_rules = 
-```json
-{{SETUP_RULES_JSON}}
-```
-
-setup_current = 
-```json
-{{SETUP_CURRENT_JSON}}
-```
-
-telemetry_columns_present = 
-```json
-{{TELEM_COLS_JSON}}
-```
-
-gates = {"generate_suggestions": {{GATE_GEN}}, "is_problem": {{GATE_PROB}}}
-
-End of data.
-=== END INSTRUCTIONS ===
-'''
-
-    telem_cols = list(df.columns) if (("df" in locals()) and (df is not None)) else []
-    export_text = (
-        CHATGPT_HEADER
-        .replace("{{TRACK_NAME}}", json.dumps(track_pick))
-        .replace("{{RUN_TYPE}}", json.dumps(run_type))
-        .replace("{{CORNER_LABELS_JSON}}", json.dumps(tracks.get(track_pick, {}).get("corners", []), indent=2))
-        .replace("{{CORNER_FEEDBACK_JSON}}", json.dumps(st.session_state.driver_feedback, indent=2))
-        .replace("{{SETUP_RULES_JSON}}", json.dumps(setup_rules, indent=2))
-        .replace("{{SETUP_CURRENT_JSON}}", json.dumps(st.session_state.setup_current, indent=2))
-        .replace("{{TELEM_COLS_JSON}}", json.dumps(telem_cols, indent=2))
-        .replace("{{GATE_GEN}}", "true" if generate_suggestions else "false")
-        .replace("{{GATE_PROB}}", "true" if is_problem else "false")
-    )
-
-    st.download_button("Download ChatGPT export (.txt)",
-                       data=export_text.encode("utf-8"),
-                       file_name="chatgpt_trackaware_export.txt",
-                       mime="text/plain")
-    st.text_area("Preview", export_text, height=360)

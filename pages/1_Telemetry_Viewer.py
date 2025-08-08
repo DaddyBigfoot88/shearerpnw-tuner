@@ -1,5 +1,5 @@
 
-import io, json, os, pathlib, tempfile, math, re
+import io, json, os, pathlib, tempfile, math, re, mimetypes
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
@@ -7,96 +7,31 @@ import streamlit as st
 from PIL import Image
 
 st.set_page_config(layout="wide")
-st.title("📊 Telemetry Viewer — All NASCAR Tracks")
-st.caption("Track-aware corner names, placeholder maps, full data view, channel plotting, setup entry/upload, and strict ChatGPT export.")
+st.title("📊 Telemetry Viewer — Track Images Manager built-in")
+st.caption("Pick a track, swap in a real map image from Wikimedia/Common (or any open link), see all data & graphs, enter/upload setup, export strict ChatGPT block.")
 
 def slug(s: str):
     return re.sub(r'[^a-z0-9_]+', '_', s.lower())
 
-# ===== Helpers =====
-def coerce_min_columns(df: pd.DataFrame):
-    notes = []
-    for col in ("Throttle","Brake"):
-        if col in df.columns:
-            try:
-                if float(df[col].max()) <= 1.5:
-                    df[col] = (df[col] * 100.0).clip(0,100)
-            except Exception: 
-                pass
-    if "Lap" not in df.columns:
-        df["Lap"] = 1
-        notes.append("Lap")
-    if "LapDistPct" not in df.columns:
-        if "LapDist" in df.columns and df["LapDist"].max() > 0:
-            df["LapDistPct"] = df["LapDist"] / df.groupby("Lap")["LapDist"].transform("max").replace(0,1)
-        else:
-            df["_idx"] = df.groupby("Lap").cumcount()
-            max_idx = df.groupby("Lap")["_idx"].transform("max").replace(0,1)
-            df["LapDistPct"] = df["_idx"] / max_idx
-            df.drop(columns=["_idx"], inplace=True)
-        notes.append("LapDistPct")
-    return df, notes
-
-def load_ibt_to_df(uploaded_file):
-    try:
-        import irsdk
-    except Exception:
-        st.error("pyirsdk isn't installed in this build. Add 'pyirsdk' and 'PyYAML' to requirements.txt.")
-        raise
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".ibt") as tmp:
-        tmp.write(uploaded_file.read()); tmp_path = tmp.name
-    try:
-        ibt = None
-        if hasattr(irsdk, "IBT"): ibt = irsdk.IBT(tmp_path)
-        elif hasattr(irsdk, "ibt"): ibt = irsdk.ibt.IBT(tmp_path)
-        if ibt is None: raise RuntimeError("pyirsdk.IBT class not found")
-        try:
-            if hasattr(ibt, "open"): ibt.open()
-        except Exception: pass
-        want = ["Lap","LapDistPct","LapDist","Speed","Throttle","Brake","SteeringWheelAngle","YawRate"]
-        data = {}
-        for ch in want:
-            arr = None
-            for getter in ("get","get_channel","get_channel_data_by_name"):
-                try:
-                    fn = getattr(ibt, getter); maybe = fn(ch)
-                    if maybe is not None: arr = maybe; break
-                except Exception: continue
-            if arr is not None: data[ch] = arr
-        if not data: raise RuntimeError("No known channels found in IBT.")
-        df = pd.DataFrame(data).dropna(how="all")
-        for col in ("Throttle","Brake"):
-            if col in df.columns and df[col].max() <= 1.5:
-                df[col] = (df[col] * 100.0).clip(0,100)
-        if "LapDistPct" not in df.columns:
-            if "LapDist" in df.columns and df["LapDist"].max() > 0:
-                if "Lap" not in df.columns: df["Lap"] = 1
-                else: df["Lap"] = df["Lap"].fillna(method="ffill").fillna(1).astype(int)
-                df["LapDistPct"] = df["LapDist"] / df.groupby("Lap")["LapDist"].transform("max").replace(0,1)
-            else:
-                if "Lap" not in df.columns: df["Lap"] = 1
-                df["_idx"] = df.groupby("Lap").cumcount()
-                max_idx = df.groupby("Lap")["_idx"].transform("max").replace(0,1)
-                df["LapDistPct"] = df["_idx"] / max_idx
-                df.drop(columns=["_idx"], inplace=True)
-        return df
-    finally:
-        try:
-            if 'ibt' in locals() and hasattr(ibt, "close"): ibt.close()
-        except Exception: pass
-        try: os.unlink(tmp_path)
-        except Exception: pass
+TRACKS_JSON_PATH = pathlib.Path("ShearerPNW_Easy_Tuner_Editables/tracks.json")
 
 def load_tracks():
-    p = pathlib.Path("ShearerPNW_Easy_Tuner_Editables/tracks.json")
-    if not p.exists():
+    if not TRACKS_JSON_PATH.exists():
         st.error("Missing ShearerPNW_Easy_Tuner_Editables/tracks.json")
         return {}
     try:
-        return json.loads(p.read_text())
+        return json.loads(TRACKS_JSON_PATH.read_text())
     except Exception as e:
         st.error(f"tracks.json error: {e}")
         return {}
+
+def save_tracks(tracks_obj):
+    try:
+        TRACKS_JSON_PATH.write_text(json.dumps(tracks_obj, indent=2))
+        return True
+    except Exception as e:
+        st.error(f"Failed to save tracks.json: {e}")
+        return False
 
 # ===== Sidebar =====
 with st.sidebar:
@@ -104,9 +39,7 @@ with st.sidebar:
     track_names = sorted(list(tracks.keys())) if tracks else ["Unknown Track"]
     default_idx = track_names.index("Watkins Glen International (Cup)") if "Watkins Glen International (Cup)" in track_names else 0
     track_pick = st.selectbox("Track", track_names, index=default_idx)
-    track_info = tracks.get(track_pick, {"corners": ["T1","T2","T3"]})
-    st.caption("Corner list is track-specific. Edit tracks.json to add or fix names.")
-
+    track_info = tracks.get(track_pick, {"id":"unknown","corners": ["T1","T2","T3"], "image": None})
     up = st.file_uploader("Upload telemetry (.csv or .ibt)", type=["csv","ibt"])    
     show_charts = st.checkbox("Show graphs", value=False)
     show_all_table = st.checkbox("Show full raw table", value=False)
@@ -114,42 +47,149 @@ with st.sidebar:
     baseline_temp = st.number_input("Baseline setup temp (°F)", 50, 140, 85)
     current_temp = st.number_input("Current track temp (°F)", 50, 140, 90)
 
-# Track image + channels
-colA, colB = st.columns([1.6, 2.4])
+# ===== Track Guide + Image Manager =====
+colA, colB = st.columns([1.2, 1.8])
 with colA:
     st.subheader("Track Guide")
     img_path = track_info.get("image")
     if img_path and pathlib.Path(img_path).exists():
         st.image(img_path, use_column_width=True, caption=f"{track_pick}")
     else:
-        st.info("No track image found. Drop a PNG/JPG at the path in tracks.json to show a corner guide.")
+        st.info("No real map yet. Use the manager to download a real image.")
 
-# ===== Load telemetry =====
-df = None
-if up is not None:
-    suffix = pathlib.Path(up.name).suffix.lower()
-    if suffix == ".csv":
-        try: df = pd.read_csv(up)
-        except Exception as e: st.error(f"CSV read error: {e}")
-    elif suffix == ".ibt":
-        try: df = load_ibt_to_df(up)
-        except Exception as e: st.error(f"IBT parse error: {e}")
-    if df is not None:
-        df, synthesized = coerce_min_columns(df)
-        if synthesized: st.warning("Synthesized columns: " + ", ".join(synthesized))
+    st.markdown("### 📷 Track Image Manager")
+    with st.expander("Add/replace image from URL"):
+        img_url = st.text_input("Image URL (Wikimedia Commons link is ideal)")
+        title = st.text_input("Credit title/caption", "")
+        author = st.text_input("Author/photographer", "")
+        lic = st.text_input("License (Public domain / CC-BY / CC-BY-SA)", "")
+        src = st.text_input("Source URL", img_url)
+        if st.button("Download and set as track image"):
+            if not img_url:
+                st.warning("Paste an image URL first.")
+            else:
+                try:
+                    import requests
+                    r = requests.get(img_url, timeout=30)
+                    ctype = r.headers.get("Content-Type","").split(";")[0].strip().lower()
+                    if r.status_code==200 and ctype.startswith("image/"):
+                        ext = mimetypes.guess_extension(ctype) or os.path.splitext(img_url)[1] or ".jpg"
+                        out_path = f"assets/tracks/{track_info['id']}{ext}"
+                        with open(out_path, "wb") as f: f.write(r.content)
+                        tracks[track_pick]["image"] = out_path
+                        tracks[track_pick]["credit"] = {"title": title, "author": author, "license": lic, "source": src}
+                        if save_tracks(tracks):
+                            st.success(f"Saved image to {out_path} and updated tracks.json")
+                    else:
+                        st.error(f"URL did not return an image. HTTP {r.status_code}, Content-Type: {ctype}")
+                except Exception as e:
+                    st.error(f"Download error: {e}")
+    with st.expander("Export ATTRIBUTION.md"):
+        if st.button("Build attribution file"):
+            lines = ["# Track Image Attribution\n"]
+            for name, meta in tracks.items():
+                credit = meta.get("credit")
+                if credit:
+                    lines.append(f"## {name}")
+                    lines.append(f"- **Title**: {credit.get('title','')}")
+                    lines.append(f"- **Author**: {credit.get('author','')}")
+                    lines.append(f"- **License**: {credit.get('license','')}")
+                    lines.append(f"- **Source**: {credit.get('source','')}\n")
+            md = "\n".join(lines)
+            st.download_button("Download ATTRIBUTION.md", data=md.encode("utf-8"), file_name="ATTRIBUTION.md", mime="text/markdown")
 
+# ===== Channels list and telemetry loader =====
 with colB:
-    st.subheader("Channels found")
-    if df is None: st.caption("Upload a file to see channels.")
-    else: st.write(", ".join(list(df.columns)))
+    st.subheader("Channels & File info")
+    st.caption("Upload a file to see channels.")
+    df = None
+    def coerce_min_columns(df):
+        notes = []
+        for col in ("Throttle","Brake"):
+            if col in df.columns:
+                try:
+                    if float(df[col].max()) <= 1.5:
+                        df[col] = (df[col] * 100.0).clip(0,100)
+                except Exception: 
+                    pass
+        if "Lap" not in df.columns:
+            df["Lap"] = 1; notes.append("Lap")
+        if "LapDistPct" not in df.columns:
+            if "LapDist" in df.columns and df["LapDist"].max() > 0:
+                df["LapDistPct"] = df["LapDist"] / df.groupby("Lap")["LapDist"].transform("max").replace(0,1)
+            else:
+                df["_idx"] = df.groupby("Lap").cumcount()
+                max_idx = df.groupby("Lap")["_idx"].transform("max").replace(0,1)
+                df["LapDistPct"] = df["_idx"] / max_idx
+                df.drop(columns=["_idx"], inplace=True)
+            notes.append("LapDistPct")
+        return df, notes
 
-# ===== Graphing =====
-if show_charts and df is not None:
-    st.markdown("---"); st.subheader("Graphs (pick any numeric channels)")
-    numeric_cols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
-    if not numeric_cols:
-        st.info("No numeric columns to plot.")
-    else:
+    if up is not None:
+        suffix = pathlib.Path(up.name).suffix.lower()
+        if suffix == ".csv":
+            try:
+                df = pd.read_csv(up)
+            except Exception as e:
+                st.error(f"CSV read error: {e}")
+        elif suffix == ".ibt":
+            try:
+                import irsdk, tempfile
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".ibt") as tmp:
+                    tmp.write(up.read()); tmp_path = tmp.name
+                ibt = None
+                if hasattr(irsdk, "IBT"): ibt = irsdk.IBT(tmp_path)
+                elif hasattr(irsdk, "ibt"): ibt = irsdk.ibt.IBT(tmp_path)
+                if ibt is None: raise RuntimeError("pyirsdk.IBT class not found")
+                try:
+                    if hasattr(ibt, "open"): ibt.open()
+                except Exception: pass
+                want = ["Lap","LapDistPct","LapDist","Speed","Throttle","Brake","SteeringWheelAngle","YawRate"]
+                data = {}
+                for ch in want:
+                    arr = None
+                    for getter in ("get","get_channel","get_channel_data_by_name"):
+                        try:
+                            fn = getattr(ibt, getter); maybe = fn(ch)
+                            if maybe is not None: arr = maybe; break
+                        except Exception: continue
+                    if arr is not None: data[ch] = arr
+                if not data: raise RuntimeError("No known channels found in IBT.")
+                df = pd.DataFrame(data).dropna(how="all")
+                for col in ("Throttle","Brake"):
+                    if col in df.columns and df[col].max() <= 1.5:
+                        df[col] = (df[col] * 100.0).clip(0,100)
+                if "LapDistPct" not in df.columns:
+                    if "LapDist" in df.columns and df["LapDist"].max() > 0:
+                        if "Lap" not in df.columns: df["Lap"] = 1
+                        else: df["Lap"] = df["Lap"].fillna(method="ffill").fillna(1).astype(int)
+                        df["LapDistPct"] = df["LapDist"] / df.groupby("Lap")["LapDist"].transform("max").replace(0,1)
+                    else:
+                        if "Lap" not in df.columns: df["Lap"] = 1
+                        df["_idx"] = df.groupby("Lap").cumcount()
+                        max_idx = df.groupby("Lap")["_idx"].transform("max").replace(0,1)
+                        df["LapDistPct"] = df["_idx"] / max_idx
+                        df.drop(columns=["_idx"], inplace=True)
+            except Exception as e:
+                st.error(f"IBT parse error: {e}")
+            finally:
+                try:
+                    if 'ibt' in locals() and hasattr(ibt, "close"): ibt.close()
+                except Exception: pass
+                try: os.unlink(tmp_path)
+                except Exception: pass
+
+    if df is not None:
+        df, notes = coerce_min_columns(df)
+        if notes: st.warning("Synthesized columns: " + ", ".join(notes))
+        st.write(", ".join(list(df.columns)))
+
+# ===== Graphs =====
+st.markdown("---")
+if st.checkbox("Show graphs", value=False, key="graphs_toggle"):
+    if 'df' in locals() and df is not None:
+        st.subheader("Graphs (pick any numeric channels)")
+        numeric_cols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
         filter_text = st.text_input("Filter channels (contains)", "")
         if filter_text:
             numeric_cols = [c for c in numeric_cols if filter_text.lower() in c.lower()]
@@ -163,6 +203,8 @@ if show_charts and df is not None:
                 chosen_laps = st.multiselect("Which laps?", laps, default=laps[:min(3,len(laps))])
             else:
                 chosen_laps = [None]
+            import numpy as np
+            import plotly.graph_objects as go
             for ch in selected:
                 st.markdown(f"**{ch}**")
                 fig = go.Figure()
@@ -178,16 +220,18 @@ if show_charts and df is not None:
                 st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("Pick at least one channel to graph.")
+    else:
+        st.info("Upload telemetry first to unlock graphs.")
 
-# ===== All data table =====
-if show_all_table and df is not None:
-    st.markdown("---"); st.subheader("All data table (first 1,000 rows)")
+# ===== Full raw table =====
+st.markdown("---")
+if 'df' in locals() and df is not None and st.checkbox("Show full raw table (first 1,000 rows)"):
     st.dataframe(df.head(1000), use_container_width=True)
 
 # ===== Corner Feedback =====
 st.markdown("---")
 st.header("🧭 Corner Feedback — track-matched labels")
-corner_labels = track_info.get("corners", ["T1","T2","T3"])
+corner_labels = tracks.get(track_pick, {}).get("corners", ["T1","T2","T3"])
 if "driver_feedback" not in st.session_state or st.session_state.get("_fb_track") != track_pick:
     st.session_state.driver_feedback = {c: {"feels":"No issue / skip","severity":0,"note":""} for c in corner_labels}
     st.session_state._fb_track = track_pick
@@ -252,12 +296,10 @@ generate_suggestions = st.checkbox("✅ Allow setup suggestions (opt-in)", value
 is_problem = st.checkbox("This run has real problems", value=False)
 
 rules_path = pathlib.Path("ShearerPNW_Easy_Tuner_Editables/setup_rules_nextgen.json")
-tracks_path = pathlib.Path("ShearerPNW_Easy_Tuner_Editables/tracks.json")
-if not all([rules_path.exists(), tracks_path.exists()]):
-    st.error("Missing setup_rules_nextgen.json or tracks.json in ShearerPNW_Easy_Tuner_Editables/")
+if not rules_path.exists():
+    st.error("Missing ShearerPNW_Easy_Tuner_Editables/setup_rules_nextgen.json")
 else:
     setup_rules = json.loads(rules_path.read_text())
-    tracks_json = json.loads(tracks_path.read_text())
 
     CHATGPT_HEADER = '''(Paste this whole block into ChatGPT and press Enter.)
 
@@ -321,14 +363,14 @@ End of data.
 === END INSTRUCTIONS ===
 '''
 
-    telem_cols = list(df.columns) if df is not None else []
+    telem_cols = list(df.columns) if 'df' in locals() and df is not None else []
     export_text = (
         CHATGPT_HEADER
         .replace("{{TRACK_NAME}}", json.dumps(track_pick))
         .replace("{{RUN_TYPE}}", json.dumps(run_type))
         .replace("{{BASELINE}}", json.dumps(baseline_temp))
         .replace("{{CURRENT}}", json.dumps(current_temp))
-        .replace("{{CORNER_LABELS_JSON}}", json.dumps(corner_labels, indent=2))
+        .replace("{{CORNER_LABELS_JSON}}", json.dumps(tracks.get(track_pick, {}).get("corners", []), indent=2))
         .replace("{{CORNER_FEEDBACK_JSON}}", json.dumps(st.session_state.driver_feedback, indent=2))
         .replace("{{SETUP_RULES_JSON}}", json.dumps(setup_rules, indent=2))
         .replace("{{SETUP_CURRENT_JSON}}", json.dumps(st.session_state.setup_current, indent=2))

@@ -6,14 +6,18 @@ import plotly.graph_objects as go
 import streamlit as st
 from PIL import Image
 
+import requests
+
 st.set_page_config(layout="wide")
-st.title("📊 Telemetry Viewer — Track Images Manager built-in")
-st.caption("Pick a track, swap in a real map image from Wikimedia/Common (or any open link), see all data & graphs, enter/upload setup, export strict ChatGPT block.")
+st.title("📊 Telemetry Viewer — Auto-Fetch Real Track Images")
+st.caption("No placeholders: it will auto-pull open-license images from Wikimedia Commons and cache locally. Plus telemetry graphs, setup, and strict ChatGPT export.")
 
 def slug(s: str):
     return re.sub(r'[^a-z0-9_]+', '_', s.lower())
 
 TRACKS_JSON_PATH = pathlib.Path("ShearerPNW_Easy_Tuner_Editables/tracks.json")
+ASSETS_DIR = pathlib.Path("assets/tracks")
+ASSETS_DIR.mkdir(parents=True, exist_ok=True)
 
 def load_tracks():
     if not TRACKS_JSON_PATH.exists():
@@ -33,13 +37,83 @@ def save_tracks(tracks_obj):
         st.error(f"Failed to save tracks.json: {e}")
         return False
 
+ACCEPTABLE_LICENSES = {"public domain","cc0","cc-by","cc-by-sa","cc by","cc by-sa","cc-by 2.0","cc-by-sa 3.0","cc-by-sa 4.0"}
+
+def commons_search_image(query: str):
+    \"\"\"Use Wikimedia Commons API to get an image + license metadata.\"\"\"
+    api = "https://commons.wikimedia.org/w/api.php"
+    params = {
+        "action": "query",
+        "format": "json",
+        "generator": "search",
+        "gsrsearch": query + " aerial OR satellite OR track",
+        "gsrlimit": 10,
+        "prop": "imageinfo",
+        "iiprop": "url|extmetadata",
+        "iiurlwidth": 2000,
+        "origin": "*"
+    }
+    r = requests.get(api, params=params, timeout=30)
+    r.raise_for_status()
+    data = r.json()
+    if "query" not in data or "pages" not in data["query"]:
+        return None
+    pages = list(data["query"]["pages"].values())
+    # pick first suitable license
+    for p in pages:
+        i = p.get("imageinfo", [{}])[0]
+        ext = i.get("extmetadata", {})
+        lic = (ext.get("LicenseShortName", {}).get("value","") or ext.get("License", {}).get("value","")).lower()
+        if any(k in lic for k in ACCEPTABLE_LICENSES):
+            return {
+                "title": p.get("title",""),
+                "url": i.get("url") or i.get("thumburl"),
+                "thumburl": i.get("thumburl", ""),
+                "license": ext.get("LicenseShortName", {}).get("value") or ext.get("License", {}).get("value",""),
+                "artist": ext.get("Artist", {}).get("value","").strip(),
+                "credit": ext.get("Credit", {}).get("value","").strip(),
+                "source": "https://commons.wikimedia.org/wiki/" + p.get("title","").replace(" ", "_")
+            }
+    # fallback: first result even if license isn't parsed as expected
+    p = pages[0]
+    i = p.get("imageinfo", [{}])[0]
+    return {
+        "title": p.get("title",""),
+        "url": i.get("url") or i.get("thumburl"),
+        "thumburl": i.get("thumburl", ""),
+        "license": i.get("extmetadata", {}).get("LicenseShortName", {}).get("value",""),
+        "artist": i.get("extmetadata", {}).get("Artist", {}).get("value","").strip(),
+        "credit": i.get("extmetadata", {}).get("Credit", {}).get("value","").strip(),
+        "source": "https://commons.wikimedia.org/wiki/" + p.get("title","").replace(" ", "_")
+    }
+
+def download_and_set(track_name: str, track_id: str, img_url: str, credit: dict, tracks_obj: dict):
+    # guess extension
+    try:
+        r = requests.get(img_url, timeout=60)
+        r.raise_for_status()
+    except Exception as e:
+        st.error(f"Download failed: {e}")
+        return False
+    ctype = r.headers.get("Content-Type","").split(";")[0].strip().lower()
+    ext = mimetypes.guess_extension(ctype) or os.path.splitext(img_url)[1] or ".jpg"
+    out_path = ASSETS_DIR / f"{track_id}{ext}"
+    with open(out_path, "wb") as f:
+        f.write(r.content)
+    # update tracks.json
+    if track_name in tracks_obj:
+        tracks_obj[track_name]["image"] = str(out_path)
+        tracks_obj[track_name]["credit"] = credit
+        save_tracks(tracks_obj)
+    return True
+
 # ===== Sidebar =====
 with st.sidebar:
     tracks = load_tracks()
     track_names = sorted(list(tracks.keys())) if tracks else ["Unknown Track"]
     default_idx = track_names.index("Watkins Glen International (Cup)") if "Watkins Glen International (Cup)" in track_names else 0
     track_pick = st.selectbox("Track", track_names, index=default_idx)
-    track_info = tracks.get(track_pick, {"id":"unknown","corners": ["T1","T2","T3"], "image": None})
+    track_info = tracks.get(track_pick, {"id":"unknown","corners": ["T1","T2","T3"]})
     up = st.file_uploader("Upload telemetry (.csv or .ibt)", type=["csv","ibt"])    
     show_charts = st.checkbox("Show graphs", value=False)
     show_all_table = st.checkbox("Show full raw table", value=False)
@@ -47,7 +121,7 @@ with st.sidebar:
     baseline_temp = st.number_input("Baseline setup temp (°F)", 50, 140, 85)
     current_temp = st.number_input("Current track temp (°F)", 50, 140, 90)
 
-# ===== Track Guide + Image Manager =====
+# ===== Track Guide & Auto-Fetch =====
 colA, colB = st.columns([1.2, 1.8])
 with colA:
     st.subheader("Track Guide")
@@ -55,35 +129,64 @@ with colA:
     if img_path and pathlib.Path(img_path).exists():
         st.image(img_path, use_column_width=True, caption=f"{track_pick}")
     else:
-        st.info("No real map yet. Use the manager to download a real image.")
-
-    st.markdown("### 📷 Track Image Manager")
-    with st.expander("Add/replace image from URL"):
-        img_url = st.text_input("Image URL (Wikimedia Commons link is ideal)")
+        st.warning("No local image yet.")
+        if st.button("Auto-fetch from Wikimedia Commons"):
+            q = track_pick.split("(")[0].strip()  # search by track name
+            result = commons_search_image(q)
+            if result and result.get("url"):
+                ok = download_and_set(
+                    track_pick,
+                    track_info.get("id","unknown"),
+                    result["url"],
+                    {
+                        "title": result.get("title",""),
+                        "author": result.get("artist",""),
+                        "license": result.get("license",""),
+                        "source": result.get("source","")
+                    },
+                    tracks
+                )
+                if ok:
+                    st.success("Image saved. Re-run to display.")
+            else:
+                st.error("Could not find a suitable image on Commons. Try manual URL.")
+    st.markdown("### Or set via URL")
+    with st.expander("Set image from URL"):
+        img_url = st.text_input("Image URL")
         title = st.text_input("Credit title/caption", "")
         author = st.text_input("Author/photographer", "")
         lic = st.text_input("License (Public domain / CC-BY / CC-BY-SA)", "")
         src = st.text_input("Source URL", img_url)
-        if st.button("Download and set as track image"):
+        if st.button("Download and set image"):
             if not img_url:
                 st.warning("Paste an image URL first.")
             else:
-                try:
-                    import requests
-                    r = requests.get(img_url, timeout=30)
-                    ctype = r.headers.get("Content-Type","").split(";")[0].strip().lower()
-                    if r.status_code==200 and ctype.startswith("image/"):
-                        ext = mimetypes.guess_extension(ctype) or os.path.splitext(img_url)[1] or ".jpg"
-                        out_path = f"assets/tracks/{track_info['id']}{ext}"
-                        with open(out_path, "wb") as f: f.write(r.content)
-                        tracks[track_pick]["image"] = out_path
-                        tracks[track_pick]["credit"] = {"title": title, "author": author, "license": lic, "source": src}
-                        if save_tracks(tracks):
-                            st.success(f"Saved image to {out_path} and updated tracks.json")
+                download_and_set(
+                    track_pick,
+                    track_info.get("id","unknown"),
+                    img_url,
+                    {"title": title, "author": author, "license": lic, "source": src},
+                    tracks
+                )
+                st.success("Saved image. Re-run to display.")
+
+    with st.expander("Auto-fetch ALL missing images (batch)"):
+        if st.button("Fetch for all tracks with no image cached"):
+            missing = [ (name, meta["id"]) for name, meta in tracks.items() if not meta.get("image") ]
+            ok, fail = 0, 0
+            for name, tid in missing:
+                r = commons_search_image(name.split("(")[0].strip())
+                if r and r.get("url"):
+                    if download_and_set(name, tid, r["url"],
+                        {"title": r.get("title",""), "author": r.get("artist",""), "license": r.get("license",""), "source": r.get("source","")},
+                        tracks):
+                        ok += 1
                     else:
-                        st.error(f"URL did not return an image. HTTP {r.status_code}, Content-Type: {ctype}")
-                except Exception as e:
-                    st.error(f"Download error: {e}")
+                        fail += 1
+                else:
+                    fail += 1
+            st.info(f"Fetched {ok} images, {fail} failed. You can set failed ones via URL.")
+
     with st.expander("Export ATTRIBUTION.md"):
         if st.button("Build attribution file"):
             lines = ["# Track Image Attribution\n"]
@@ -98,10 +201,9 @@ with colA:
             md = "\n".join(lines)
             st.download_button("Download ATTRIBUTION.md", data=md.encode("utf-8"), file_name="ATTRIBUTION.md", mime="text/markdown")
 
-# ===== Channels list and telemetry loader =====
+# ===== Channels & Telemetry loading =====
 with colB:
     st.subheader("Channels & File info")
-    st.caption("Upload a file to see channels.")
     df = None
     def coerce_min_columns(df):
         notes = []
@@ -125,18 +227,19 @@ with colB:
             notes.append("LapDistPct")
         return df, notes
 
-    if up is not None:
-        suffix = pathlib.Path(up.name).suffix.lower()
+    up_file = st.file_uploader("Upload telemetry (.csv or .ibt)", type=["csv","ibt"], key="up_main")    
+    if up_file is not None:
+        suffix = pathlib.Path(up_file.name).suffix.lower()
         if suffix == ".csv":
             try:
-                df = pd.read_csv(up)
+                df = pd.read_csv(up_file)
             except Exception as e:
                 st.error(f"CSV read error: {e}")
         elif suffix == ".ibt":
             try:
                 import irsdk, tempfile
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".ibt") as tmp:
-                    tmp.write(up.read()); tmp_path = tmp.name
+                    tmp.write(up_file.read()); tmp_path = tmp.name
                 ibt = None
                 if hasattr(irsdk, "IBT"): ibt = irsdk.IBT(tmp_path)
                 elif hasattr(irsdk, "ibt"): ibt = irsdk.ibt.IBT(tmp_path)

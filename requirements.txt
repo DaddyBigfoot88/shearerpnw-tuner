@@ -2,3 +2,5 @@ streamlit>=1.32
 pandas
 plotly
 numpy
+pyirsdk
+PyYAML

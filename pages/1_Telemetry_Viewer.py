@@ -1,5 +1,5 @@
 
-# Telemetry Viewer – Centered controls, no auto-fetch, AI export includes tracks_meta + coach_rules + temps + stats
+# Telemetry Viewer – Centered + Responsive (no auto-fetch; AI export includes rules/meta/temps/stats)
 import io, json, os, pathlib, tempfile, re, mimetypes
 import numpy as np
 import pandas as pd
@@ -8,8 +8,40 @@ import plotly.express as px
 import streamlit as st
 
 st.set_page_config(layout="wide")
-st.title("Telemetry Viewer")
-st.caption("All the options are centered. No auto-downloads. Export packs rules + track meta + temps + quick stats.")
+
+# === Center and size the app responsively ===
+st.markdown(
+    """
+    <style>
+      /* Center the main content and control its width */
+      .appview-container .main .block-container{
+        max-width: 1200px;    /* wide on desktop */
+        padding-top: 0.5rem;
+        padding-bottom: 2rem;
+        margin-left: auto;
+        margin-right: auto;   /* center */
+      }
+      /* On small screens keep it centered with comfy side padding */
+      @media (max-width: 900px){
+        .appview-container .main .block-container{
+          max-width: 95vw;
+          padding-left: 0.75rem;
+          padding-right: 0.75rem;
+        }
+      }
+      /* Center headings + first paragraph (caption) */
+      h1, h2, h3 { text-align: center; }
+      .stMarkdown p { text-align: center; }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+# Title + caption inside a center column so it looks perfectly centered even before CSS loads
+t_l, t_m, t_r = st.columns([1,2,1])
+with t_m:
+    st.title("Telemetry Viewer")
+    st.caption("All the options are centered. No auto-downloads. Export packs rules + track meta + temps + quick stats.")
 
 def slug(s: str):
     return re.sub(r'[^a-z0-9_]+', '_', s.lower())

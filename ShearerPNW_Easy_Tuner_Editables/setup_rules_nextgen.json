@@ -1,0 +1,87 @@
+{
+  "allowed_parameters": {
+    "tires": [
+      "LF_pressure",
+      "RF_pressure",
+      "LR_pressure",
+      "RR_pressure",
+      "stagger_note"
+    ],
+    "suspension": [
+      "LF_shock_rebound_clicks",
+      "RF_shock_rebound_clicks",
+      "LR_shock_rebound_clicks",
+      "RR_shock_rebound_clicks",
+      "LF_shock_bump_clicks",
+      "RF_shock_bump_clicks",
+      "LR_shock_bump_clicks",
+      "RR_shock_bump_clicks",
+      "front_swaybar_stiffness",
+      "rear_swaybar_stiffness",
+      "front_spring_rate",
+      "rear_spring_rate"
+    ],
+    "chassis": [
+      "crossweight_percent",
+      "front_ride_height_in",
+      "rear_ride_height_in",
+      "rear_trackbar_in"
+    ],
+    "rear_end": [
+      "diff_preload_ftlbs",
+      "gear_note"
+    ]
+  },
+  "limits": {
+    "pressure": {
+      "min_psig": 10.0,
+      "max_psig": 60.0,
+      "increments_psig": 0.5
+    },
+    "shock_clicks": {
+      "min_clicks": 0,
+      "max_clicks": 10,
+      "increments": 1
+    },
+    "spring_rate": {
+      "min_lbin": 100,
+      "max_lbin": 2200,
+      "increments": 25
+    },
+    "ride_height": {
+      "min_in": 2.0,
+      "max_in": 6.0,
+      "increments": 0.05
+    },
+    "crossweight": {
+      "min_pct": 45.0,
+      "max_pct": 55.0,
+      "increments": 0.1
+    },
+    "trackbar": {
+      "min_in": 5.0,
+      "max_in": 12.0,
+      "increments": 0.25
+    },
+    "diff_preload": {
+      "min_ftlbs": 0,
+      "max_ftlbs": 75,
+      "increments": 5
+    },
+    "camber": {
+      "min_deg": -10.0,
+      "max_deg": 10.0,
+      "increments": 0.1
+    },
+    "toe": {
+      "min_deg": -1.5,
+      "max_deg": 1.5,
+      "increments": 0.05
+    }
+  },
+  "notes": [
+    "Conservative ranges. Edit for your league.",
+    "Clamp suggestions to bounds & increments."
+  ],
+  "version": "1.2"
+}

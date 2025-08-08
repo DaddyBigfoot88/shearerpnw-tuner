@@ -1,0 +1,370 @@
+{
+  "Daytona International Speedway (Oval)": {
+    "id": "daytona_oval",
+    "image": "assets/tracks/daytona_oval.png",
+    "corners": [
+      "T1",
+      "T2",
+      "T3",
+      "T4"
+    ]
+  },
+  "Atlanta Motor Speedway": {
+    "id": "atlanta",
+    "image": "assets/tracks/atlanta.png",
+    "corners": [
+      "T1",
+      "T2",
+      "T3",
+      "T4"
+    ]
+  },
+  "Las Vegas Motor Speedway": {
+    "id": "las_vegas",
+    "image": "assets/tracks/las_vegas.png",
+    "corners": [
+      "T1",
+      "T2",
+      "T3",
+      "T4"
+    ]
+  },
+  "Phoenix Raceway": {
+    "id": "phoenix",
+    "image": "assets/tracks/phoenix.png",
+    "corners": [
+      "T1",
+      "T2",
+      "T3",
+      "T4"
+    ]
+  },
+  "Auto Club / Fontana (Legacy)": {
+    "id": "fontana",
+    "image": "assets/tracks/fontana.png",
+    "corners": [
+      "T1",
+      "T2",
+      "T3",
+      "T4"
+    ]
+  },
+  "Circuit of The Americas (COTA)": {
+    "id": "cota",
+    "image": "assets/tracks/cota.png",
+    "corners": [
+      "T1",
+      "Esses (T3\u2013T6)",
+      "T7",
+      "T8",
+      "T9",
+      "T10",
+      "T11 (Hairpin)",
+      "Back Straight",
+      "T12",
+      "Stadium (T13\u2013T15)",
+      "T16",
+      "T17",
+      "T18",
+      "T19",
+      "T20"
+    ]
+  },
+  "Richmond Raceway": {
+    "id": "richmond",
+    "image": "assets/tracks/richmond.png",
+    "corners": [
+      "T1",
+      "T2",
+      "T3",
+      "T4"
+    ]
+  },
+  "Martinsville Speedway": {
+    "id": "martinsville",
+    "image": "assets/tracks/martinsville.png",
+    "corners": [
+      "T1",
+      "T2",
+      "T3",
+      "T4"
+    ]
+  },
+  "Bristol Motor Speedway": {
+    "id": "bristol",
+    "image": "assets/tracks/bristol.png",
+    "corners": [
+      "T1",
+      "T2",
+      "T3",
+      "T4"
+    ]
+  },
+  "Talladega Superspeedway": {
+    "id": "talladega",
+    "image": "assets/tracks/talladega.png",
+    "corners": [
+      "T1",
+      "T2",
+      "T3",
+      "T4"
+    ]
+  },
+  "Dover Motor Speedway": {
+    "id": "dover",
+    "image": "assets/tracks/dover.png",
+    "corners": [
+      "T1",
+      "T2",
+      "T3",
+      "T4"
+    ]
+  },
+  "Kansas Speedway": {
+    "id": "kansas",
+    "image": "assets/tracks/kansas.png",
+    "corners": [
+      "T1",
+      "T2",
+      "T3",
+      "T4"
+    ]
+  },
+  "Darlington Raceway": {
+    "id": "darlington",
+    "image": "assets/tracks/darlington.png",
+    "corners": [
+      "T1",
+      "T2",
+      "T3",
+      "T4"
+    ]
+  },
+  "Charlotte Motor Speedway (Oval)": {
+    "id": "charlotte_oval",
+    "image": "assets/tracks/charlotte_oval.png",
+    "corners": [
+      "T1",
+      "T2",
+      "T3",
+      "T4"
+    ]
+  },
+  "World Wide Technology Raceway (Gateway)": {
+    "id": "gateway",
+    "image": "assets/tracks/gateway.png",
+    "corners": [
+      "T1",
+      "T2",
+      "T3",
+      "T4"
+    ]
+  },
+  "Sonoma Raceway": {
+    "id": "sonoma",
+    "image": "assets/tracks/sonoma.png",
+    "corners": [
+      "T1",
+      "T2",
+      "Carousel (T5\u2013T6)",
+      "T7",
+      "Esses (T8\u2013T10)",
+      "Hairpin (T11)"
+    ]
+  },
+  "Nashville Superspeedway": {
+    "id": "nashville",
+    "image": "assets/tracks/nashville.png",
+    "corners": [
+      "T1",
+      "T2",
+      "T3",
+      "T4"
+    ]
+  },
+  "Chicago Street Course": {
+    "id": "chicago_street",
+    "image": "assets/tracks/chicago_street.png",
+    "corners": [
+      "T1",
+      "T2",
+      "T3",
+      "T4",
+      "T5",
+      "T6",
+      "T7",
+      "T8",
+      "T9",
+      "T10",
+      "T11",
+      "T12"
+    ]
+  },
+  "New Hampshire Motor Speedway": {
+    "id": "loudon",
+    "image": "assets/tracks/loudon.png",
+    "corners": [
+      "T1",
+      "T2",
+      "T3",
+      "T4"
+    ]
+  },
+  "Pocono Raceway": {
+    "id": "pocono",
+    "image": "assets/tracks/pocono.png",
+    "corners": [
+      "Turn 1",
+      "Tunnel Turn (T2)",
+      "Turn 3"
+    ]
+  },
+  "Indianapolis Motor Speedway (Oval)": {
+    "id": "ims_oval",
+    "image": "assets/tracks/ims_oval.png",
+    "corners": [
+      "T1",
+      "T2",
+      "T3",
+      "T4"
+    ]
+  },
+  "Indianapolis Motor Speedway (Road)": {
+    "id": "ims_road",
+    "image": "assets/tracks/ims_road.png",
+    "corners": [
+      "T1 Complex",
+      "T4",
+      "T6",
+      "T7",
+      "T8",
+      "T9",
+      "T10",
+      "T11",
+      "T12",
+      "T13",
+      "T14"
+    ]
+  },
+  "Michigan International Speedway": {
+    "id": "michigan",
+    "image": "assets/tracks/michigan.png",
+    "corners": [
+      "T1",
+      "T2",
+      "T3",
+      "T4"
+    ]
+  },
+  "Watkins Glen International (Cup)": {
+    "id": "watkins_glen_cup",
+    "image": "assets/tracks/watkins_glen_cup.png",
+    "corners": [
+      "T1",
+      "Esses (T2\u2013T4)",
+      "Bus Stop (Inner Loop)",
+      "Outer Loop (T5)",
+      "T6 (Chute)",
+      "T7 (Final Corner)"
+    ]
+  },
+  "Daytona Road Course": {
+    "id": "daytona_road",
+    "image": "assets/tracks/daytona_road.png",
+    "corners": [
+      "T1 (International Horseshoe)",
+      "T2",
+      "Kink",
+      "West Horseshoe",
+      "Le Mans Chicane (Bus Stop)",
+      "NASCAR 3-4",
+      "Front Chicane"
+    ]
+  },
+  "Homestead-Miami Speedway": {
+    "id": "homestead",
+    "image": "assets/tracks/homestead.png",
+    "corners": [
+      "T1",
+      "T2",
+      "T3",
+      "T4"
+    ]
+  },
+  "Texas Motor Speedway": {
+    "id": "texas",
+    "image": "assets/tracks/texas.png",
+    "corners": [
+      "T1",
+      "T2",
+      "T3",
+      "T4"
+    ]
+  },
+  "Charlotte Motor Speedway Roval": {
+    "id": "charlotte_roval",
+    "image": "assets/tracks/charlotte_roval.png",
+    "corners": [
+      "Infield T1",
+      "Infield T2",
+      "Infield T3",
+      "NASCAR T1-2",
+      "Backstretch Chicane",
+      "NASCAR T3-4",
+      "Frontstretch Chicane"
+    ]
+  },
+  "North Wilkesboro Speedway": {
+    "id": "north_wilkesboro",
+    "image": "assets/tracks/north_wilkesboro.png",
+    "corners": [
+      "T1",
+      "T2",
+      "T3",
+      "T4"
+    ]
+  },
+  "Road America": {
+    "id": "road_america",
+    "image": "assets/tracks/road_america.png",
+    "corners": [
+      "T1",
+      "T3",
+      "T5",
+      "T6",
+      "T7",
+      "Carousel (T9\u2013T10)",
+      "Kink (T11)",
+      "Canada Corner (T12)",
+      "T13",
+      "T14"
+    ]
+  },
+  "Road Atlanta (Michelin Raceway)": {
+    "id": "road_atlanta",
+    "image": "assets/tracks/road_atlanta.png",
+    "corners": [
+      "T1",
+      "Esses (T3\u2013T5)",
+      "T6",
+      "T7",
+      "Back Straight",
+      "Turn 10A/10B Chicane",
+      "T12"
+    ]
+  },
+  "Watkins Glen - Boot (Alt)": {
+    "id": "watkins_glen_boot",
+    "image": "assets/tracks/watkins_glen_boot.png",
+    "corners": [
+      "T1",
+      "Esses (T2\u2013T4)",
+      "Bus Stop (Inner Loop)",
+      "Outer Loop (T5)",
+      "Chute/Old T5",
+      "Toe",
+      "Heel",
+      "Final Corner"
+    ]
+  }
+}

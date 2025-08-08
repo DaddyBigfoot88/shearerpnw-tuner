@@ -34,58 +34,10 @@
         "angle_deg": 70
       },
       {
-        "name": "T7",
+        "name": "T7 (Final Corner)",
         "dir": "R",
         "bank_deg": 6.0,
         "angle_deg": 100
-      }
-    ]
-  },
-  "Charlotte Motor Speedway Roval": {
-    "id": "charlotte_roval",
-    "baseline_temp_f": 85,
-    "corners": [
-      {
-        "name": "Infield T1",
-        "dir": "L",
-        "bank_deg": 2.0,
-        "angle_deg": 70
-      },
-      {
-        "name": "Infield T2",
-        "dir": "L",
-        "bank_deg": 2.0,
-        "angle_deg": 60
-      },
-      {
-        "name": "Infield T3",
-        "dir": "R",
-        "bank_deg": 2.0,
-        "angle_deg": 90
-      },
-      {
-        "name": "NASCAR T1-2",
-        "dir": "L",
-        "bank_deg": 24.0,
-        "angle_deg": 180
-      },
-      {
-        "name": "Backstretch Chicane",
-        "dir": "M",
-        "bank_deg": 0.0,
-        "angle_deg": 90
-      },
-      {
-        "name": "NASCAR T3-4",
-        "dir": "L",
-        "bank_deg": 24.0,
-        "angle_deg": 180
-      },
-      {
-        "name": "Frontstretch Chicane",
-        "dir": "M",
-        "bank_deg": 0.0,
-        "angle_deg": 90
       }
     ]
   },
@@ -152,36 +104,6 @@
         "dir": "L",
         "bank_deg": 12,
         "angle_deg": 90
-      }
-    ]
-  },
-  "Sonoma Raceway": {
-    "id": "sonoma",
-    "baseline_temp_f": 85,
-    "corners": [
-      {
-        "name": "T2",
-        "dir": "R",
-        "bank_deg": 6,
-        "angle_deg": 120
-      },
-      {
-        "name": "Carousel",
-        "dir": "L",
-        "bank_deg": 6,
-        "angle_deg": 200
-      },
-      {
-        "name": "Esses",
-        "dir": "R",
-        "bank_deg": 4,
-        "angle_deg": 90
-      },
-      {
-        "name": "Hairpin",
-        "dir": "R",
-        "bank_deg": 4,
-        "angle_deg": 180
       }
     ]
   }

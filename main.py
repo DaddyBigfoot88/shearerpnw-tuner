@@ -6,6 +6,27 @@ import os
 #if st.text_input("Enter Access Code") != "Shearer":
    # st.stop()
 
+
+# === NAV: show links to other pages in the sidebar ===
+with st.sidebar:
+    st.markdown("### Pages")
+    _nav_ok = False
+    try:
+        # Streamlit 1.26+ has page_link
+        st.page_link("main.py", label="🏁 Easy Tuner (Home)")
+        st.page_link("pages/1_Telemetry_Viewer.py", label="📊 Telemetry Viewer")
+        _nav_ok = True
+    except Exception:
+        pass
+    if not _nav_ok:
+        st.caption("If you don't see page links, you're likely on an older Streamlit.")
+        if st.button("📊 Open Telemetry Viewer"):
+            try:
+                # Streamlit 1.22+ has switch_page
+                st.switch_page("pages/1_Telemetry_Viewer.py")
+            except Exception:
+                st.warning("Please update Streamlit to the latest version to enable navigation buttons.")
+
 st.title("ShearerPNW Easy Tuner")
 st.subheader("NASCAR Next Gen Feedback-Based Setup Assistant")
 
@@ -77,7 +98,7 @@ else:
 
 # === SECTION: Placeholder for Manual Setup Input
 st.markdown("## ⚙️ Current Setup (Manual Input Placeholder)")
-st.info("Setup entry and telemetry upload coming soon.")
+st.info("Setup entry and telemetry upload coming soon. See 'Telemetry Viewer' page in the sidebar for charts/exports.")
 
 # === SECTION: Footer
 st.markdown("---")

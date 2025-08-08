@@ -1,5 +1,5 @@
 
-# Telemetry Viewer - Auto-Fetch Real Track Images (ASCII-safe) + Distinct Plot Colors
+# Telemetry Viewer - No UI Image Manager; Auto-fetch real images; Distinct colors
 import io, json, os, pathlib, tempfile, math, re, mimetypes
 import numpy as np
 import pandas as pd
@@ -10,8 +10,8 @@ from PIL import Image
 import requests
 
 st.set_page_config(layout="wide")
-st.title("Telemetry Viewer - Auto-Fetch Real Track Images")
-st.caption("Auto-fetch track images from Wikimedia Commons, show telemetry, plot with distinct colors, setup entry/upload, strict ChatGPT export.")
+st.title("Telemetry Viewer")
+st.caption("Track images auto-fetched from Wikimedia Commons (first run), then cached. Telemetry graphs with distinct colors, setup entry/upload, strict ChatGPT export.")
 
 def slug(s: str):
     return re.sub(r'[^a-z0-9_]+', '_', s.lower())
@@ -46,7 +46,7 @@ def commons_search_image(query: str):
         "action": "query",
         "format": "json",
         "generator": "search",
-        "gsrsearch": query + " aerial OR satellite OR track",
+        "gsrsearch": query + " aerial OR satellite OR track map",
         "gsrlimit": 10,
         "prop": "imageinfo",
         "iiprop": "url|extmetadata",
@@ -67,10 +67,8 @@ def commons_search_image(query: str):
             return {
                 "title": p.get("title",""),
                 "url": i.get("url") or i.get("thumburl"),
-                "thumburl": i.get("thumburl", ""),
                 "license": ext.get("LicenseShortName", {}).get("value") or ext.get("License", {}).get("value",""),
                 "artist": ext.get("Artist", {}).get("value","").strip(),
-                "credit": ext.get("Credit", {}).get("value","").strip(),
                 "source": "https://commons.wikimedia.org/wiki/" + p.get("title","").replace(" ", "_")
             }
     # fallback
@@ -79,30 +77,35 @@ def commons_search_image(query: str):
     return {
         "title": p.get("title",""),
         "url": i.get("url") or i.get("thumburl"),
-        "thumburl": i.get("thumburl", ""),
         "license": i.get("extmetadata", {}).get("LicenseShortName", {}).get("value",""),
         "artist": i.get("extmetadata", {}).get("Artist", {}).get("value","").strip(),
-        "credit": i.get("extmetadata", {}).get("Credit", {}).get("value","").strip(),
         "source": "https://commons.wikimedia.org/wiki/" + p.get("title","").replace(" ", "_")
     }
 
-def download_and_set(track_name: str, track_id: str, img_url: str, credit: dict, tracks_obj: dict):
+def ensure_image(track_name: str, track_meta: dict, tracks_obj: dict):
+    # If local image exists, return it
+    local = track_meta.get("image")
+    if local and pathlib.Path(local).exists():
+        return local
+    # else, try fetch
+    q = track_name.split("(")[0].strip()
     try:
-        r = requests.get(img_url, timeout=60)
-        r.raise_for_status()
+        res = commons_search_image(q)
+        if res and res.get("url"):
+            r = requests.get(res["url"], timeout=60)
+            r.raise_for_status()
+            ctype = r.headers.get("Content-Type","").split(";")[0].strip().lower()
+            ext = mimetypes.guess_extension(ctype) or os.path.splitext(res["url"])[1] or ".jpg"
+            out_path = ASSETS_DIR / f"{track_meta.get('id','track')}{ext}"
+            with open(out_path, "wb") as f:
+                f.write(r.content)
+            tracks_obj[track_name]["image"] = str(out_path)
+            tracks_obj[track_name]["credit"] = {"title": res.get("title",""), "author": res.get("artist",""), "license": res.get("license",""), "source": res.get("source","")}
+            save_tracks(tracks_obj)
+            return str(out_path)
     except Exception as e:
-        st.error(f"Download failed: {e}")
-        return False
-    ctype = r.headers.get("Content-Type","").split(";")[0].strip().lower()
-    ext = mimetypes.guess_extension(ctype) or os.path.splitext(img_url)[1] or ".jpg"
-    out_path = ASSETS_DIR / f"{track_id}{ext}"
-    with open(out_path, "wb") as f:
-        f.write(r.content)
-    if track_name in tracks_obj:
-        tracks_obj[track_name]["image"] = str(out_path)
-        tracks_obj[track_name]["credit"] = credit
-        save_tracks(tracks_obj)
-    return True
+        st.info(f"Could not auto-fetch image for {track_name}.")
+    return None
 
 # Sidebar
 with st.sidebar:
@@ -115,74 +118,19 @@ with st.sidebar:
     show_charts = st.checkbox("Show graphs", value=False)
     show_all_table = st.checkbox("Show full raw table", value=False)
     run_type = st.radio("Run type", ["Practice","Qualifying","Race"], index=0, horizontal=True)
-    baseline_temp = st.number_input("Baseline setup temp (F)", 50, 140, 85)
-    current_temp = st.number_input("Current track temp (F)", 50, 140, 90)
 
-# Track Guide and image fetch
+# Track image (no UI, just fetch if needed)
 colA, colB = st.columns([1.2, 1.8])
 with colA:
-    st.subheader("Track Guide")
+    st.subheader("Track")
     img_path = track_info.get("image")
+    if not (img_path and pathlib.Path(img_path).exists()):
+        with st.spinner("Fetching track image (first run only)..."):
+            img_path = ensure_image(track_pick, track_info, tracks)
     if img_path and pathlib.Path(img_path).exists():
-        st.image(img_path, use_column_width=True, caption=str(track_pick))
+        st.image(img_path, use_container_width=True, caption=str(track_pick))
     else:
-        st.warning("No local image yet.")
-        if st.button("Auto-fetch from Wikimedia Commons"):
-            q = track_pick.split("(")[0].strip()
-            result = commons_search_image(q)
-            if result and result.get("url"):
-                ok = download_and_set(
-                    track_pick,
-                    track_info.get("id","unknown"),
-                    result["url"],
-                    {
-                        "title": result.get("title",""),
-                        "author": result.get("artist",""),
-                        "license": result.get("license",""),
-                        "source": result.get("source","")
-                    },
-                    tracks
-                )
-                if ok:
-                    st.success("Image saved. Re-run to display.")
-            else:
-                st.error("Could not find a suitable image on Commons. Try manual URL.")
-    st.markdown("### Or set via URL")
-    with st.expander("Set image from URL"):
-        img_url = st.text_input("Image URL")
-        title = st.text_input("Credit title/caption", "")
-        author = st.text_input("Author/photographer", "")
-        lic = st.text_input("License (Public domain / CC-BY / CC-BY-SA)", "")
-        src = st.text_input("Source URL", img_url)
-        if st.button("Download and set image"):
-            if not img_url:
-                st.warning("Paste an image URL first.")
-            else:
-                download_and_set(
-                    track_pick,
-                    track_info.get("id","unknown"),
-                    img_url,
-                    {"title": title, "author": author, "license": lic, "source": src},
-                    tracks
-                )
-                st.success("Saved image. Re-run to display.")
-
-    with st.expander("Auto-fetch ALL missing images (batch)"):
-        if st.button("Fetch for all tracks with no image cached"):
-            missing = [ (name, meta["id"]) for name, meta in tracks.items() if not meta.get("image") ]
-            ok, fail = 0, 0
-            for name, tid in missing:
-                r = commons_search_image(name.split("(")[0].strip())
-                if r and r.get("url"):
-                    if download_and_set(name, tid, r["url"],
-                        {"title": r.get("title",""), "author": r.get("artist",""), "license": r.get("license",""), "source": r.get("source","")},
-                        tracks):
-                        ok += 1
-                    else:
-                        fail += 1
-                else:
-                    fail += 1
-            st.info(f"Fetched {ok} images, {fail} failed. You can set failed ones via URL.")
+        st.warning("No image found and auto-fetch failed. It will try again next run.")
 
 # Channels & telemetry loader
 with colB:
@@ -284,14 +232,9 @@ if show_charts and df is not None:
         selected = st.multiselect("Channels to plot", numeric_cols, default=default_pick)
         mode = st.radio("X axis", ["LapDistPct","Index"], index=0, horizontal=True)
         bylap = st.checkbox("Split by Lap", value=True)
-
-        # Color palette and cycle
-        palette = (px.colors.qualitative.Safe
-                   + px.colors.qualitative.Set2
-                   + px.colors.qualitative.Plotly)
+        palette = (px.colors.qualitative.Safe + px.colors.qualitative.Set2 + px.colors.qualitative.Plotly)
         color_cycle = palette * 5
         trace_idx = 0
-
         if selected:
             if bylap and "Lap" in df.columns:
                 laps = sorted(pd.unique(df["Lap"]).tolist())
@@ -303,33 +246,21 @@ if show_charts and df is not None:
                 fig = go.Figure()
                 if chosen_laps == [None]:
                     x = df["LapDistPct"] if mode=="LapDistPct" and "LapDistPct" in df.columns else np.arange(len(df))
-                    fig.add_trace(go.Scatter(
-                        x=x, y=df[ch], mode="lines", name=ch,
-                        line=dict(width=2.5, color=color_cycle[trace_idx % len(color_cycle)]),
-                        opacity=0.95
-                    ))
+                    fig.add_trace(go.Scatter(x=x, y=df[ch], mode="lines", name=ch,
+                                             line=dict(width=2.5, color=color_cycle[trace_idx % len(color_cycle)]),
+                                             opacity=0.95))
                     trace_idx += 1
                 else:
                     for L in chosen_laps:
                         dlap = df[df["Lap"]==L]
                         x = dlap["LapDistPct"] if mode=="LapDistPct" and "LapDistPct" in dlap.columns else np.arange(len(dlap))
-                        fig.add_trace(go.Scatter(
-                            x=x, y=dlap[ch], mode="lines", name=f"Lap {L}",
-                            line=dict(width=2.5, color=color_cycle[trace_idx % len(color_cycle)]),
-                            opacity=0.95
-                        ))
+                        fig.add_trace(go.Scatter(x=x, y=dlap[ch], mode="lines", name=f"Lap {L}",
+                                                 line=dict(width=2.5, color=color_cycle[trace_idx % len(color_cycle)]),
+                                                 opacity=0.95))
                         trace_idx += 1
-
-                fig.update_layout(
-                    template="plotly_white",
-                    xaxis_title=mode,
-                    yaxis_title=ch,
-                    legend_orientation="h",
-                    legend_y=-0.25,
-                    margin=dict(t=30, b=50),
-                    hovermode="x unified",
-                    height=300
-                )
+                fig.update_layout(template="plotly_white", xaxis_title=mode, yaxis_title=ch,
+                                  legend_orientation="h", legend_y=-0.25, margin=dict(t=30,b=50),
+                                  hovermode="x unified", height=300)
                 st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("Pick at least one channel to plot.")
@@ -342,7 +273,7 @@ if show_all_table and df is not None:
 
 # Corner feedback
 st.markdown("---")
-st.header("Corner Feedback - track matched labels")
+st.header("Corner Feedback")
 corner_labels = tracks.get(track_pick, {}).get("corners", ["T1","T2","T3"])
 if "driver_feedback" not in st.session_state or st.session_state.get("_fb_track") != track_pick:
     st.session_state.driver_feedback = {c: {"feels":"No issue / skip","severity":0,"note":""} for c in corner_labels}
@@ -367,7 +298,7 @@ st.success("Feedback saved for this track.")
 
 # Setup entry/upload
 st.markdown("---")
-st.header("Current Setup - enter or upload")
+st.header("Current Setup")
 if "setup_current" not in st.session_state: st.session_state.setup_current = {}
 c1, c2, c3, c4 = st.columns(4)
 with c1:
@@ -445,7 +376,6 @@ SESSION CONTEXT:
 car: NASCAR Next Gen
 track: {{TRACK_NAME}}
 run_type: {{RUN_TYPE}}
-temps: {"baseline_F": {{BASELINE}}, "current_F": {{CURRENT}}}
 
 corner_labels: {{CORNER_LABELS_JSON}}
 
@@ -482,8 +412,6 @@ End of data.
         CHATGPT_HEADER
         .replace("{{TRACK_NAME}}", json.dumps(track_pick))
         .replace("{{RUN_TYPE}}", json.dumps(run_type))
-        .replace("{{BASELINE}}", json.dumps(baseline_temp))
-        .replace("{{CURRENT}}", json.dumps(current_temp))
         .replace("{{CORNER_LABELS_JSON}}", json.dumps(tracks.get(track_pick, {}).get("corners", []), indent=2))
         .replace("{{CORNER_FEEDBACK_JSON}}", json.dumps(st.session_state.driver_feedback, indent=2))
         .replace("{{SETUP_RULES_JSON}}", json.dumps(setup_rules, indent=2))

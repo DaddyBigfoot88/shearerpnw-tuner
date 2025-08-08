@@ -1,5 +1,4 @@
-
-# Telemetry Viewer – NO AUTO FETCH, everything else unchanged
+# Telemetry Viewer – NO AUTO FETCH, AI export now includes tracks_meta + coach_rules + temps + stats
 import io, json, os, pathlib, tempfile, re, mimetypes
 import numpy as np
 import pandas as pd
@@ -9,14 +8,24 @@ import streamlit as st
 
 st.set_page_config(layout="wide")
 st.title("Telemetry Viewer")
-st.caption("Maps show only if already cached. No auto-download or prefetch.")
+st.caption("Maps show only if already cached. No auto-download or prefetch. AI export now packs metadata + temps + stats.")
 
 def slug(s: str):
     return re.sub(r'[^a-z0-9_]+', '_', s.lower())
 
 TRACKS_JSON_PATH = pathlib.Path("ShearerPNW_Easy_Tuner_Editables/tracks.json")
+TRACKS_META_PATH = pathlib.Path("ShearerPNW_Easy_Tuner_Editables/tracks_meta.json")
+COACH_RULES_PATH = pathlib.Path("ShearerPNW_Easy_Tuner_Editables/coach_rules.json")
 ASSETS_DIR = pathlib.Path("assets/tracks")
 ASSETS_DIR.mkdir(parents=True, exist_ok=True)
+
+def load_json(path, fallback):
+    try:
+        if path.exists():
+            return json.loads(path.read_text())
+    except Exception as e:
+        st.error("Error reading {}: {}".format(path, e))
+    return fallback
 
 def load_tracks():
     if not TRACKS_JSON_PATH.exists():
@@ -28,24 +37,18 @@ def load_tracks():
         st.error(f"tracks.json error: {e}")
         return {}
 
-def save_tracks(tracks_obj):
-    try:
-        TRACKS_JSON_PATH.write_text(json.dumps(tracks_obj, indent=2))
-        return True
-    except Exception as e:
-        st.error(f"Failed to save tracks.json: {e}")
-        return False
-
 # ---------- NO AUTO FETCH ----------
-tracks = load_tracks()
+tracks      = load_tracks()
+tracks_meta = load_json(TRACKS_META_PATH, {})
+coach_rules = load_json(COACH_RULES_PATH, {})
 
-# Sidebar (unchanged)
+# Sidebar (kept the same)
 with st.sidebar:
     track_names = sorted(list(tracks.keys())) if tracks else ["Unknown Track"]
     default_idx = track_names.index("Watkins Glen International (Cup)") if "Watkins Glen International (Cup)" in track_names else 0
     track_pick = st.selectbox("Track", track_names, index=default_idx)
     track_info = tracks.get(track_pick, {"id":"unknown","corners": ["T1","T2","T3"]})
-    up = st.file_uploader("Upload telemetry (.csv or .ibt)", type=["csv","ibt"])    
+    up = st.file_uploader("Upload telemetry (.csv or .ibt)", type=["csv","ibt"])
     show_charts = st.checkbox("Show graphs", value=False)
     show_all_table = st.checkbox("Show full raw table", value=False)
     run_type = st.radio("Run type", ["Practice","Qualifying","Race"], index=0, horizontal=True)
@@ -60,7 +63,7 @@ with colA:
     else:
         st.warning("No cached image for this track. Add a file path in tracks.json and commit the image to assets/tracks/.")
 
-# Channels & telemetry loader (unchanged)
+# Channels & telemetry loader
 with colB:
     st.subheader("Channels and File info")
     df = None
@@ -71,7 +74,7 @@ with colB:
                 try:
                     if float(df[col].max()) <= 1.5:
                         df[col] = (df[col] * 100.0).clip(0,100)
-                except Exception: 
+                except Exception:
                     pass
         if "Lap" not in df.columns:
             df["Lap"] = 1; notes.append("Lap")
@@ -104,7 +107,7 @@ with colB:
                 if ibt is None: raise RuntimeError("pyirsdk.IBT class not found")
                 try:
                     if hasattr(ibt, "open"): ibt.open()
-                except Exception: 
+                except Exception:
                     pass
                 want = ["Lap","LapDistPct","LapDist","Speed","Throttle","Brake","SteeringWheelAngle","YawRate"]
                 data = {}
@@ -114,26 +117,21 @@ with colB:
                         try:
                             fn = getattr(ibt, getter); maybe = fn(ch)
                             if maybe is not None: arr = maybe; break
-                        except Exception: 
+                        except Exception:
                             continue
-                    if arr is not None: 
-                        data[ch] = arr
-                if not data: 
-                    raise RuntimeError("No known channels found in IBT.")
+                    if arr is not None: data[ch] = arr
+                if not data: raise RuntimeError("No known channels found in IBT.")
                 df = pd.DataFrame(data).dropna(how="all")
                 for col in ("Throttle","Brake"):
                     if col in df.columns and df[col].max() <= 1.5:
                         df[col] = (df[col] * 100.0).clip(0,100)
                 if "LapDistPct" not in df.columns:
                     if "LapDist" in df.columns and df["LapDist"].max() > 0:
-                        if "Lap" not in df.columns: 
-                            df["Lap"] = 1
-                        else: 
-                            df["Lap"] = df["Lap"].fillna(method="ffill").fillna(1).astype(int)
+                        if "Lap" not in df.columns: df["Lap"] = 1
+                        else: df["Lap"] = df["Lap"].fillna(method="ffill").fillna(1).astype(int)
                         df["LapDistPct"] = df["LapDist"] / df.groupby("Lap")["LapDist"].transform("max").replace(0,1)
                     else:
-                        if "Lap" not in df.columns: 
-                            df["Lap"] = 1
+                        if "Lap" not in df.columns: df["Lap"] = 1
                         df["_idx"] = df.groupby("Lap").cumcount()
                         max_idx = df.groupby("Lap")["_idx"].transform("max").replace(0,1)
                         df["LapDistPct"] = df["_idx"] / max_idx
@@ -142,22 +140,33 @@ with colB:
                 st.error(f"IBT parse error: {e}")
             finally:
                 try:
-                    if 'ibt' in locals() and hasattr(ibt, "close"): 
-                        ibt.close()
-                except Exception: 
-                    pass
-                try: 
-                    os.unlink(tmp_path)
-                except Exception: 
-                    pass
+                    if 'ibt' in locals() and hasattr(ibt, "close"): ibt.close()
+                except Exception: pass
+                try: os.unlink(tmp_path)
+                except Exception: pass
 
     if df is not None:
         df, notes = coerce_min_columns(df)
-        if notes: 
-            st.warning("Synthesized columns: " + ", ".join(notes))
+        if notes: st.warning("Synthesized columns: " + ", ".join(notes))
         st.write(", ".join(list(df.columns)))
 
-# Graphs (distinct colors) — unchanged
+# Quick channel stats (used in AI export too)
+def basic_channel_stats(df, cols):
+    out = {}
+    for c in cols:
+        try:
+            s = df[c].astype(float)
+            out[c] = {
+                "count": int(s.shape[0]),
+                "min": float(np.nanmin(s)),
+                "max": float(np.nanmax(s)),
+                "mean": float(np.nanmean(s))
+            }
+        except Exception:
+            continue
+    return out
+
+# Graphs (distinct colors)
 st.markdown("---")
 if show_charts and 'df' in locals() and df is not None:
     st.subheader("Graphs (pick any numeric channels)")
@@ -182,7 +191,7 @@ if show_charts and 'df' in locals() and df is not None:
             else:
                 chosen_laps = [None]
             for ch in selected:
-                st.markdown(f"**{ch}**")
+                st.markdown("**{}**".format(ch))
                 fig = go.Figure()
                 if chosen_laps == [None]:
                     x = df["LapDistPct"] if mode=="LapDistPct" and "LapDistPct" in df.columns else np.arange(len(df))
@@ -194,7 +203,7 @@ if show_charts and 'df' in locals() and df is not None:
                     for L in chosen_laps:
                         dlap = df[df["Lap"]==L]
                         x = dlap["LapDistPct"] if mode=="LapDistPct" and "LapDistPct" in dlap.columns else np.arange(len(dlap))
-                        fig.add_trace(go.Scatter(x=x, y=dlap[ch], mode="lines", name=f"Lap {L}",
+                        fig.add_trace(go.Scatter(x=x, y=dlap[ch], mode="lines", name="Lap {}".format(L),
                                                  line=dict(width=2.5, color=color_cycle[trace_idx % len(color_cycle)]),
                                                  opacity=0.95))
                         trace_idx += 1
@@ -205,13 +214,13 @@ if show_charts and 'df' in locals() and df is not None:
         else:
             st.info("Pick at least one channel to plot.")
 
-# Full table (unchanged)
+# Full table
 if show_all_table and 'df' in locals() and df is not None:
     st.markdown("---")
     st.subheader("All data table (first 1,000 rows)")
     st.dataframe(df.head(1000), use_container_width=True)
 
-# Corner feedback (unchanged)
+# Corner feedback
 st.markdown("---")
 st.header("Corner Feedback")
 corner_labels = tracks.get(track_pick, {}).get("corners", ["T1","T2","T3"])
@@ -228,15 +237,15 @@ DEFAULT_FEELINGS = [
     "Porpoising / Bottoming","Brakes locking","Traction wheelspin","Other"]
 for i, c in enumerate(corner_labels):
     with cols[i % 3]:
-        st.markdown(f"**{c}**")
-        feels = st.selectbox(f"{c} feel", DEFAULT_FEELINGS, index=0, key=f"feel_{slug(c)}")
-        severity = st.slider(f"{c} severity", 0, 10, st.session_state.driver_feedback[c].get("severity",0), key=f"sev_{slug(c)}")
-        note = st.text_input(f"{c} note (optional)", value=st.session_state.driver_feedback[c].get("note",""), key=f"note_{slug(c)}")
+        st.markdown("**{}**".format(c))
+        feels = st.selectbox("{} feel".format(c), DEFAULT_FEELINGS, index=0, key="feel_{}".format(slug(c)))
+        severity = st.slider("{} severity".format(c), 0, 10, st.session_state.driver_feedback[c].get("severity",0), key="sev_{}".format(slug(c)))
+        note = st.text_input("{} note (optional)".format(c), value=st.session_state.driver_feedback[c].get("note",""), key="note_{}".format(slug(c)))
         st.session_state.driver_feedback[c] = {"feels": feels, "severity": int(severity), "note": note}
 
 st.success("Feedback saved for this track.")
 
-# Setup entry/upload (unchanged)
+# Setup entry/upload
 st.markdown("---")
 st.header("Current Setup")
 if "setup_current" not in st.session_state: st.session_state.setup_current = {}
@@ -274,9 +283,19 @@ if sup is not None:
     except Exception as e:
         st.error(f"Setup upload error: {e}")
 
-# Export block (unchanged logic)
+# === NEW: Temperature fields for export ===
 st.markdown("---")
-st.header("Export to ChatGPT (with rules, no auto suggestions)")
+st.header("Session Temps (for AI export)")
+base_default = tracks_meta.get(track_pick, {}).get("baseline_temp_f", coach_rules.get("defaults", {}).get("baseline_temp_f", 85))
+c1t, c2t = st.columns(2)
+with c1t:
+    baseline_temp = st.number_input("Baseline Setup Temperature (°F)", 40, 150, int(base_default))
+with c2t:
+    current_temp = st.number_input("Current Track Temperature (°F)", 40, 150, int(base_default))
+
+# Export block
+st.markdown("---")
+st.header("Export to ChatGPT (with rules + track meta + temps + stats)")
 generate_suggestions = st.checkbox("Allow setup suggestions (opt-in)", value=False)
 is_problem = st.checkbox("This run has real problems", value=False)
 
@@ -285,6 +304,30 @@ if not rules_path.exists():
     st.error("Missing ShearerPNW_Easy_Tuner_Editables/setup_rules_nextgen.json")
 else:
     setup_rules = json.loads(rules_path.read_text())
+
+    # Pack a slim copy of coach rules (the engine rules used by the Coach page)
+    coach_rules_slim = {
+        "run_type_scaling": coach_rules.get("run_type_scaling", {}),
+        "feel_key_map": coach_rules.get("feel_key_map", {}),
+        "scaling": coach_rules.get("scaling", {}),
+        "temp_comp": coach_rules.get("temp_comp", {}),
+        # full symptoms can be big; include if you want stricter guidance:
+        "symptoms": coach_rules.get("symptoms", {})
+    }
+
+    # Selected track meta (left/right, banking, angle) if available
+    track_meta_pick = tracks_meta.get(track_pick, {})
+
+    # Telemetry stats (keep it short + numeric)
+    if 'df' in locals() and df is not None:
+        numeric_cols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
+        # only summarize up to 14 columns to keep export compact
+        summarize_cols = numeric_cols[:14]
+        telemetry_stats = basic_channel_stats(df, summarize_cols)
+        telem_cols = list(df.columns)
+    else:
+        telemetry_stats = {}
+        telem_cols = []
 
     CHATGPT_HEADER = """(Paste this whole block into ChatGPT and press Enter.)
 
@@ -306,6 +349,12 @@ Rules you must follow:
 - Do not invent settings or parts that are not in setup_rules.
 - Keep the output short and practical.
 
+Extra context you can use:
+- run_type_scaling modifies how aggressive the changes should be.
+- tracks_meta gives corner direction (L/R), banking (deg), and corner angle (deg) so you can mirror left/right correctly and scale for long/steep corners.
+- temp_comp tells you what to bias when track is hotter/cooler than baseline.
+- telemetry_stats are just a quick look (min/max/mean) to ground any comments.
+
 Output format (when suggestions are allowed):
 1) Key Findings (one line per corner with a problem)
 2) Setup Changes (grouped by Tires, Chassis, Suspension, Rear End; include units & clicks)
@@ -316,6 +365,8 @@ SESSION CONTEXT:
 car: NASCAR Next Gen
 track: {{TRACK_NAME}}
 run_type: {{RUN_TYPE}}
+baseline_setup_temp_f: {{BASE_TEMP}}
+current_track_temp_f: {{CUR_TEMP}}
 
 corner_labels: {{CORNER_LABELS_JSON}}
 
@@ -324,6 +375,16 @@ OK—here is the data:
 corner_feedback_json = 
 ```json
 {{CORNER_FEEDBACK_JSON}}
+```
+
+tracks_meta_for_this_track =
+```json
+{{TRACK_META_JSON}}
+```
+
+coach_rules_core =
+```json
+{{COACH_RULES_JSON}}
 ```
 
 setup_rules = 
@@ -341,22 +402,31 @@ telemetry_columns_present =
 {{TELEM_COLS_JSON}}
 ```
 
+telemetry_stats_quicklook =
+```json
+{{TELEM_STATS_JSON}}
+```
+
 gates = {"generate_suggestions": {{GATE_GEN}}, "is_problem": {{GATE_PROB}}}
 
 End of data.
 === END INSTRUCTIONS ===
 """
 
-    telem_cols = list(df.columns) if (('df' in locals()) and (df is not None)) else []
     export_text = (
         CHATGPT_HEADER
         .replace("{{TRACK_NAME}}", json.dumps(track_pick))
         .replace("{{RUN_TYPE}}", json.dumps(run_type))
+        .replace("{{BASE_TEMP}}", json.dumps(baseline_temp))
+        .replace("{{CUR_TEMP}}", json.dumps(current_temp))
         .replace("{{CORNER_LABELS_JSON}}", json.dumps(tracks.get(track_pick, {}).get("corners", []), indent=2))
+        .replace("{{TRACK_META_JSON}}", json.dumps(track_meta_pick, indent=2))
+        .replace("{{COACH_RULES_JSON}}", json.dumps(coach_rules_slim, indent=2))
         .replace("{{CORNER_FEEDBACK_JSON}}", json.dumps(st.session_state.driver_feedback, indent=2))
         .replace("{{SETUP_RULES_JSON}}", json.dumps(setup_rules, indent=2))
         .replace("{{SETUP_CURRENT_JSON}}", json.dumps(st.session_state.setup_current, indent=2))
         .replace("{{TELEM_COLS_JSON}}", json.dumps(telem_cols, indent=2))
+        .replace("{{TELEM_STATS_JSON}}", json.dumps(telemetry_stats, indent=2))
         .replace("{{GATE_GEN}}", "true" if generate_suggestions else "false")
         .replace("{{GATE_PROB}}", "true" if is_problem else "false")
     )

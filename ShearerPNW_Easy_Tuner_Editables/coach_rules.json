@@ -1,0 +1,518 @@
+{
+  "meta": {
+    "version": "1.0"
+  },
+  "defaults": {
+    "baseline_temp_f": 85
+  },
+  "feel_key_map": {
+    "Loose on entry": "loose_entry",
+    "Loose mid-corner": "loose_mid",
+    "Loose on exit": "loose_exit",
+    "Tight on entry": "tight_entry",
+    "Tight mid-corner": "tight_mid",
+    "Tight on exit": "tight_exit",
+    "Brakes locking": "brakes_lock",
+    "Traction wheelspin": "wheelspin",
+    "Porpoising / Bottoming": "porpoising"
+  },
+  "scaling": {
+    "bank_low_deg": 4,
+    "bank_low_mult": 1.25,
+    "bank_mid_deg": 12,
+    "bank_mid_mult": 1.0,
+    "bank_high_mult": 0.8,
+    "angle_high_deg": 120,
+    "angle_high_mult": 1.25,
+    "angle_mid_deg": 60,
+    "angle_mid_mult": 1.0,
+    "angle_low_mult": 0.85
+  },
+  "temp_comp": {
+    "deadband_f": 5,
+    "hotter": {
+      "tires": {
+        "LF_pressure": {
+          "delta": {
+            "slight": -0.5,
+            "moderate": -1.0,
+            "severe": -1.5
+          },
+          "units": " psi"
+        },
+        "RF_pressure": {
+          "delta": {
+            "slight": -0.5,
+            "moderate": -1.0,
+            "severe": -1.5
+          },
+          "units": " psi"
+        },
+        "LR_pressure": {
+          "delta": {
+            "slight": -0.5,
+            "moderate": -1.0,
+            "severe": -1.5
+          },
+          "units": " psi"
+        },
+        "RR_pressure": {
+          "delta": {
+            "slight": -0.5,
+            "moderate": -1.0,
+            "severe": -1.5
+          },
+          "units": " psi"
+        }
+      },
+      "suspension": {
+        "LF_shock_bump_clicks": {
+          "delta": {
+            "slight": 1,
+            "moderate": 2,
+            "severe": 3
+          },
+          "units": " clicks"
+        },
+        "RF_shock_bump_clicks": {
+          "delta": {
+            "slight": 1,
+            "moderate": 2,
+            "severe": 3
+          },
+          "units": " clicks"
+        },
+        "LR_shock_bump_clicks": {
+          "delta": {
+            "slight": 1,
+            "moderate": 2,
+            "severe": 3
+          },
+          "units": " clicks"
+        },
+        "RR_shock_bump_clicks": {
+          "delta": {
+            "slight": 1,
+            "moderate": 2,
+            "severe": 3
+          },
+          "units": " clicks"
+        }
+      },
+      "rear_end": {
+        "diff_preload_ftlbs": {
+          "delta": {
+            "slight": 5,
+            "moderate": 10,
+            "severe": 15
+          },
+          "units": " ft-lbs"
+        }
+      }
+    },
+    "cooler": {
+      "tires": {
+        "LF_pressure": {
+          "delta": {
+            "slight": 0.5,
+            "moderate": 1.0,
+            "severe": 1.5
+          },
+          "units": " psi"
+        },
+        "RF_pressure": {
+          "delta": {
+            "slight": 0.5,
+            "moderate": 1.0,
+            "severe": 1.5
+          },
+          "units": " psi"
+        },
+        "LR_pressure": {
+          "delta": {
+            "slight": 0.5,
+            "moderate": 1.0,
+            "severe": 1.5
+          },
+          "units": " psi"
+        },
+        "RR_pressure": {
+          "delta": {
+            "slight": 0.5,
+            "moderate": 1.0,
+            "severe": 1.5
+          },
+          "units": " psi"
+        }
+      },
+      "suspension": {
+        "LF_shock_bump_clicks": {
+          "delta": {
+            "slight": -1,
+            "moderate": -2,
+            "severe": -3
+          },
+          "units": " clicks"
+        },
+        "RF_shock_bump_clicks": {
+          "delta": {
+            "slight": -1,
+            "moderate": -2,
+            "severe": -3
+          },
+          "units": " clicks"
+        },
+        "LR_shock_bump_clicks": {
+          "delta": {
+            "slight": -1,
+            "moderate": -2,
+            "severe": -3
+          },
+          "units": " clicks"
+        },
+        "RR_shock_bump_clicks": {
+          "delta": {
+            "slight": -1,
+            "moderate": -2,
+            "severe": -3
+          },
+          "units": " clicks"
+        }
+      },
+      "chassis": {
+        "rear_ride_height_in": {
+          "delta": {
+            "slight": 0.05,
+            "moderate": 0.1,
+            "severe": 0.15
+          },
+          "units": " in"
+        }
+      },
+      "rear_end": {
+        "diff_preload_ftlbs": {
+          "delta": {
+            "slight": -5,
+            "moderate": -10,
+            "severe": -15
+          },
+          "units": " ft-lbs"
+        }
+      }
+    }
+  },
+  "symptoms": {
+    "loose_entry": {
+      "tires": {
+        "LF_pressure": {
+          "delta": {
+            "slight": -0.5,
+            "moderate": -1.0,
+            "severe": -1.5
+          },
+          "units": " psi"
+        },
+        "RR_pressure": {
+          "delta": {
+            "slight": -0.5,
+            "moderate": -1.0,
+            "severe": -1.5
+          },
+          "units": " psi"
+        }
+      },
+      "chassis": {
+        "rear_trackbar_in": {
+          "delta": {
+            "slight": -0.25,
+            "moderate": -0.5,
+            "severe": -0.75
+          },
+          "units": " in"
+        },
+        "crossweight_percent": {
+          "delta": {
+            "slight": 0.1,
+            "moderate": 0.2,
+            "severe": 0.3
+          },
+          "units": " %"
+        }
+      },
+      "suspension": {
+        "LF_shock_rebound_clicks": {
+          "delta": {
+            "slight": 1,
+            "moderate": 2,
+            "severe": 3
+          },
+          "units": " clicks"
+        }
+      }
+    },
+    "loose_mid": {
+      "suspension": {
+        "rear_swaybar_stiffness": {
+          "delta": {
+            "slight": -1,
+            "moderate": -2,
+            "severe": -3
+          },
+          "units": " step"
+        },
+        "front_swaybar_stiffness": {
+          "delta": {
+            "slight": 1,
+            "moderate": 2,
+            "severe": 3
+          },
+          "units": " step"
+        },
+        "rear_spring_rate": {
+          "delta": {
+            "slight": -25,
+            "moderate": -50,
+            "severe": -75
+          },
+          "units": " lb/in"
+        }
+      },
+      "tires": {
+        "RR_pressure": {
+          "delta": {
+            "slight": -0.5,
+            "moderate": -1.0,
+            "severe": -1.5
+          },
+          "units": " psi"
+        }
+      }
+    },
+    "loose_exit": {
+      "rear_end": {
+        "diff_preload_ftlbs": {
+          "delta": {
+            "slight": 5,
+            "moderate": 10,
+            "severe": 15
+          },
+          "units": " ft-lbs"
+        }
+      },
+      "chassis": {
+        "rear_trackbar_in": {
+          "delta": {
+            "slight": -0.25,
+            "moderate": -0.5,
+            "severe": -0.75
+          },
+          "units": " in"
+        }
+      },
+      "tires": {
+        "RR_pressure": {
+          "delta": {
+            "slight": -0.5,
+            "moderate": -1.0,
+            "severe": -1.5
+          },
+          "units": " psi"
+        }
+      },
+      "suspension": {
+        "RR_shock_rebound_clicks": {
+          "delta": {
+            "slight": -1,
+            "moderate": -2,
+            "severe": -3
+          },
+          "units": " clicks"
+        }
+      }
+    },
+    "tight_entry": {
+      "chassis": {
+        "crossweight_percent": {
+          "delta": {
+            "slight": -0.1,
+            "moderate": -0.2,
+            "severe": -0.3
+          },
+          "units": " %"
+        },
+        "rear_trackbar_in": {
+          "delta": {
+            "slight": 0.25,
+            "moderate": 0.5,
+            "severe": 0.75
+          },
+          "units": " in"
+        }
+      },
+      "tires": {
+        "RF_pressure": {
+          "delta": {
+            "slight": -0.5,
+            "moderate": -1.0,
+            "severe": -1.5
+          },
+          "units": " psi"
+        }
+      }
+    },
+    "tight_mid": {
+      "suspension": {
+        "front_swaybar_stiffness": {
+          "delta": {
+            "slight": -1,
+            "moderate": -2,
+            "severe": -3
+          },
+          "units": " step"
+        },
+        "rear_swaybar_stiffness": {
+          "delta": {
+            "slight": 1,
+            "moderate": 2,
+            "severe": 3
+          },
+          "units": " step"
+        },
+        "front_spring_rate": {
+          "delta": {
+            "slight": -25,
+            "moderate": -50,
+            "severe": -75
+          },
+          "units": " lb/in"
+        }
+      },
+      "tires": {
+        "LF_pressure": {
+          "delta": {
+            "slight": -0.5,
+            "moderate": -1.0,
+            "severe": -1.5
+          },
+          "units": " psi"
+        }
+      }
+    },
+    "tight_exit": {
+      "rear_end": {
+        "diff_preload_ftlbs": {
+          "delta": {
+            "slight": -5,
+            "moderate": -10,
+            "severe": -15
+          },
+          "units": " ft-lbs"
+        }
+      },
+      "chassis": {
+        "rear_trackbar_in": {
+          "delta": {
+            "slight": 0.25,
+            "moderate": 0.5,
+            "severe": 0.75
+          },
+          "units": " in"
+        }
+      },
+      "tires": {
+        "RR_pressure": {
+          "delta": {
+            "slight": 0.5,
+            "moderate": 1.0,
+            "severe": 1.5
+          },
+          "units": " psi"
+        }
+      }
+    },
+    "brakes_lock": {
+      "suspension": {
+        "LF_shock_rebound_clicks": {
+          "delta": {
+            "slight": -1,
+            "moderate": -2,
+            "severe": -3
+          },
+          "units": " clicks"
+        }
+      },
+      "tires": {
+        "RF_pressure": {
+          "delta": {
+            "slight": -0.5,
+            "moderate": -1.0,
+            "severe": -1.5
+          },
+          "units": " psi"
+        }
+      }
+    },
+    "wheelspin": {
+      "suspension": {
+        "RR_shock_rebound_clicks": {
+          "delta": {
+            "slight": -1,
+            "moderate": -2,
+            "severe": -3
+          },
+          "units": " clicks"
+        }
+      },
+      "rear_end": {
+        "diff_preload_ftlbs": {
+          "delta": {
+            "slight": 5,
+            "moderate": 10,
+            "severe": 15
+          },
+          "units": " ft-lbs"
+        }
+      },
+      "tires": {
+        "RR_pressure": {
+          "delta": {
+            "slight": -0.5,
+            "moderate": -1.0,
+            "severe": -1.5
+          },
+          "units": " psi"
+        }
+      }
+    },
+    "porpoising": {
+      "suspension": {
+        "front_spring_rate": {
+          "delta": {
+            "slight": 25,
+            "moderate": 50,
+            "severe": 75
+          },
+          "units": " lb/in"
+        },
+        "rear_spring_rate": {
+          "delta": {
+            "slight": 25,
+            "moderate": 50,
+            "severe": 75
+          },
+          "units": " lb/in"
+        }
+      },
+      "chassis": {
+        "front_ride_height_in": {
+          "delta": {
+            "slight": 0.05,
+            "moderate": 0.1,
+            "severe": 0.15
+          },
+          "units": " in"
+        }
+      }
+    }
+  }
+}

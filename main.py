@@ -1,105 +1,48 @@
 import streamlit as st
-import json
-import os
 
-# === SECTION: Access Control ===
-#if st.text_input("Enter Access Code") != "Shearer":
-   # st.stop()
+st.set_page_config(page_title="ShearerPNW Easy Tuner", layout="wide")
 
+# (Optional) simple access control
+# if st.text_input("Enter Access Code") != "Shearer":
+#     st.stop()
 
-# === NAV: show links to other pages in the sidebar ===
-with st.sidebar:
-    st.markdown("### Pages")
-    _nav_ok = False
+# --- Centered landing layout ---
+left, mid, right = st.columns([1, 2, 1])
+with mid:
+    st.title("ShearerPNW Easy Tuner")
+    st.subheader("Pick what you want to do")
+
+    st.markdown("### Quick Links")
+    nav_ok = False
     try:
-        # Streamlit 1.26+ has page_link
-        st.page_link("main.py", label="🏁 Easy Tuner (Home)")
-        st.page_link("pages/1_Telemetry_Viewer.py", label="📊 Telemetry Viewer")
-        _nav_ok = True
+        # Streamlit 1.26+ supports page_link
+        st.page_link("pages/1_Telemetry_Viewer.py", label="🤖 AI Setup Prep (Telemetry)")
+        st.page_link("pages/2_Setup_Coach.py", label="🧠 Setup Coach (Question Mode)")
+        nav_ok = True
     except Exception:
-        pass
-    if not _nav_ok:
-        st.caption("If you don't see page links, you're likely on an older Streamlit.")
-        if st.button("📊 Open Telemetry Viewer"):
-            try:
-                # Streamlit 1.22+ has switch_page
-                st.switch_page("pages/1_Telemetry_Viewer.py")
-            except Exception:
-                st.warning("Please update Streamlit to the latest version to enable navigation buttons.")
+        nav_ok = False
 
-st.title("ShearerPNW Easy Tuner")
-st.subheader("NASCAR Next Gen Feedback-Based Setup Assistant")
+    if not nav_ok:
+        st.caption("Your Streamlit version looks older. Use the buttons below.")
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("🤖 AI Setup Prep (Telemetry)"):
+                try:
+                    st.switch_page("pages/1_Telemetry_Viewer.py")
+                except Exception:
+                    st.warning("Update Streamlit to enable native page links.")
+        with c2:
+            if st.button("🧠 Setup Coach (Question Mode)"):
+                try:
+                    st.switch_page("pages/2_Setup_Coach.py")
+                except Exception:
+                    st.warning("Update Streamlit to enable native page links.")
 
-# === SECTION: Load Corner Feedback Rules ===
-corner_rules_path = "ShearerPNW_Easy_Tuner_Editables/track_corner_rules.json"
-corner_rules = {}
-if os.path.exists(corner_rules_path):
-    with open(corner_rules_path) as f:
-        corner_rules = json.load(f)
+    st.markdown("---")
+    st.markdown("#### Heads up")
+    st.write("- **AI Setup Prep (Telemetry):** Prep your run data and export a clean package for AI coaching. No auto-downloads.")
+    st.write("- **Setup Coach (Question Mode):** Answer corner-by-corner questions and get setup changes right in the app.")
 
-# === SECTION: Track (Locked) ===
-track = "Watkins Glen International"
-st.text(f"Track locked: {track}")
-
-# === SECTION: Corner, Feedback, Severity
-corner = st.selectbox("Select Track Corner", list(corner_rules.get(track, {}).keys()))
-feedback = st.selectbox("How does the car feel?", [
-    "Loose on entry", "Loose mid-corner", "Loose on exit",
-    "Tight on entry", "Tight mid-corner", "Tight on exit"
-])
-severity_level = st.slider("How bad is it?", 1, 10, 5)
-if severity_level <= 3:
-    severity = "slight"
-elif severity_level <= 7:
-    severity = "moderate"
-else:
-    severity = "severe"
-
-# === SECTION: Temperature Comparison
-st.markdown("### 🌡️ Track Temperature Adjustment Mode")
-temp_only = st.checkbox("Show adjustments for temperature difference only")
-
-current_temp = st.slider("Current Track Temperature (°F)", 60, 140, 90)
-baseline_temp = st.slider("Baseline Setup Temperature (°F)", 60, 140, corner_rules.get(track, {}).get("baseline_temp", 85))
-temp_diff = current_temp - baseline_temp
-
-if temp_only:
-    st.markdown("### 🔧 Temperature-Based Adjustment Suggestions")
-    if abs(temp_diff) > 5:
-        if temp_diff > 0:
-            st.warning(f"Track is {temp_diff}°F hotter than baseline. Expect reduced grip.")
-            st.write("- Lower tire pressures by 0.5–1.5 psi")
-            st.write("- Stiffen shocks slightly to control excess movement")
-            st.write("- Consider increasing rear spring rate or diff preload")
-        else:
-            st.info(f"Track is {abs(temp_diff)}°F cooler than baseline. Expect more grip, lower buildup.")
-            st.write("- Raise tire pressures by 0.5–1.5 psi")
-            st.write("- Soften rear shocks slightly for added rotation")
-            st.write("- May reduce preload or raise RR ride height")
-    else:
-        st.success("Track temp is close to baseline. No major adjustments needed.")
-
-# === SECTION: Feedback-Based Suggestions
-else:
-    st.markdown("## 🧠 Setup Adjustment Suggestions")
-
-    # Defensive access
-    track_data = corner_rules.get(track, {})
-    corner_data = track_data.get(corner, {}) if isinstance(track_data, dict) else {}
-    rules_data = corner_data.get("rules", {}) if isinstance(corner_data, dict) else {}
-    feedback_data = rules_data.get(feedback, {}) if isinstance(rules_data, dict) else {}
-    tips = feedback_data.get(severity, []) if isinstance(feedback_data, dict) else []
-
-    if tips:
-        for tip in tips:
-            st.write(tip)
-    else:
-        st.info("No suggestions available for this symptom at this corner and severity level.")
-
-# === SECTION: Placeholder for Manual Setup Input
-st.markdown("## ⚙️ Current Setup (Manual Input Placeholder)")
-st.info("Setup entry and telemetry upload coming soon. See 'Telemetry Viewer' page in the sidebar for charts/exports.")
-
-# === SECTION: Footer
 st.markdown("---")
-st.caption("ShearerPNW Easy Tuner – v1.2 Corner Logic Engine")
+st.caption("ShearerPNW • Built in the PNW 🤘")
+

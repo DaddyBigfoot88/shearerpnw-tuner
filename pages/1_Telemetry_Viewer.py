@@ -1,16 +1,17 @@
 
+# Telemetry Viewer - Auto-Fetch Real Track Images (ASCII-safe) + Distinct Plot Colors
 import io, json, os, pathlib, tempfile, math, re, mimetypes
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+import plotly.express as px
 import streamlit as st
 from PIL import Image
-
 import requests
 
 st.set_page_config(layout="wide")
-st.title("📊 Telemetry Viewer — Auto-Fetch Real Track Images")
-st.caption("No placeholders: it will auto-pull open-license images from Wikimedia Commons and cache locally. Plus telemetry graphs, setup, and strict ChatGPT export.")
+st.title("Telemetry Viewer - Auto-Fetch Real Track Images")
+st.caption("Auto-fetch track images from Wikimedia Commons, show telemetry, plot with distinct colors, setup entry/upload, strict ChatGPT export.")
 
 def slug(s: str):
     return re.sub(r'[^a-z0-9_]+', '_', s.lower())
@@ -40,7 +41,6 @@ def save_tracks(tracks_obj):
 ACCEPTABLE_LICENSES = {"public domain","cc0","cc-by","cc-by-sa","cc by","cc by-sa","cc-by 2.0","cc-by-sa 3.0","cc-by-sa 4.0"}
 
 def commons_search_image(query: str):
-    \"\"\"Use Wikimedia Commons API to get an image + license metadata.\"\"\"
     api = "https://commons.wikimedia.org/w/api.php"
     params = {
         "action": "query",
@@ -59,7 +59,6 @@ def commons_search_image(query: str):
     if "query" not in data or "pages" not in data["query"]:
         return None
     pages = list(data["query"]["pages"].values())
-    # pick first suitable license
     for p in pages:
         i = p.get("imageinfo", [{}])[0]
         ext = i.get("extmetadata", {})
@@ -74,7 +73,7 @@ def commons_search_image(query: str):
                 "credit": ext.get("Credit", {}).get("value","").strip(),
                 "source": "https://commons.wikimedia.org/wiki/" + p.get("title","").replace(" ", "_")
             }
-    # fallback: first result even if license isn't parsed as expected
+    # fallback
     p = pages[0]
     i = p.get("imageinfo", [{}])[0]
     return {
@@ -88,7 +87,6 @@ def commons_search_image(query: str):
     }
 
 def download_and_set(track_name: str, track_id: str, img_url: str, credit: dict, tracks_obj: dict):
-    # guess extension
     try:
         r = requests.get(img_url, timeout=60)
         r.raise_for_status()
@@ -100,14 +98,13 @@ def download_and_set(track_name: str, track_id: str, img_url: str, credit: dict,
     out_path = ASSETS_DIR / f"{track_id}{ext}"
     with open(out_path, "wb") as f:
         f.write(r.content)
-    # update tracks.json
     if track_name in tracks_obj:
         tracks_obj[track_name]["image"] = str(out_path)
         tracks_obj[track_name]["credit"] = credit
         save_tracks(tracks_obj)
     return True
 
-# ===== Sidebar =====
+# Sidebar
 with st.sidebar:
     tracks = load_tracks()
     track_names = sorted(list(tracks.keys())) if tracks else ["Unknown Track"]
@@ -118,20 +115,20 @@ with st.sidebar:
     show_charts = st.checkbox("Show graphs", value=False)
     show_all_table = st.checkbox("Show full raw table", value=False)
     run_type = st.radio("Run type", ["Practice","Qualifying","Race"], index=0, horizontal=True)
-    baseline_temp = st.number_input("Baseline setup temp (°F)", 50, 140, 85)
-    current_temp = st.number_input("Current track temp (°F)", 50, 140, 90)
+    baseline_temp = st.number_input("Baseline setup temp (F)", 50, 140, 85)
+    current_temp = st.number_input("Current track temp (F)", 50, 140, 90)
 
-# ===== Track Guide & Auto-Fetch =====
+# Track Guide and image fetch
 colA, colB = st.columns([1.2, 1.8])
 with colA:
     st.subheader("Track Guide")
     img_path = track_info.get("image")
     if img_path and pathlib.Path(img_path).exists():
-        st.image(img_path, use_column_width=True, caption=f"{track_pick}")
+        st.image(img_path, use_column_width=True, caption=str(track_pick))
     else:
         st.warning("No local image yet.")
         if st.button("Auto-fetch from Wikimedia Commons"):
-            q = track_pick.split("(")[0].strip()  # search by track name
+            q = track_pick.split("(")[0].strip()
             result = commons_search_image(q)
             if result and result.get("url"):
                 ok = download_and_set(
@@ -187,23 +184,9 @@ with colA:
                     fail += 1
             st.info(f"Fetched {ok} images, {fail} failed. You can set failed ones via URL.")
 
-    with st.expander("Export ATTRIBUTION.md"):
-        if st.button("Build attribution file"):
-            lines = ["# Track Image Attribution\n"]
-            for name, meta in tracks.items():
-                credit = meta.get("credit")
-                if credit:
-                    lines.append(f"## {name}")
-                    lines.append(f"- **Title**: {credit.get('title','')}")
-                    lines.append(f"- **Author**: {credit.get('author','')}")
-                    lines.append(f"- **License**: {credit.get('license','')}")
-                    lines.append(f"- **Source**: {credit.get('source','')}\n")
-            md = "\n".join(lines)
-            st.download_button("Download ATTRIBUTION.md", data=md.encode("utf-8"), file_name="ATTRIBUTION.md", mime="text/markdown")
-
-# ===== Channels & Telemetry loading =====
+# Channels & telemetry loader
 with colB:
-    st.subheader("Channels & File info")
+    st.subheader("Channels and File info")
     df = None
     def coerce_min_columns(df):
         notes = []
@@ -227,19 +210,18 @@ with colB:
             notes.append("LapDistPct")
         return df, notes
 
-    up_file = st.file_uploader("Upload telemetry (.csv or .ibt)", type=["csv","ibt"], key="up_main")    
-    if up_file is not None:
-        suffix = pathlib.Path(up_file.name).suffix.lower()
+    if up is not None:
+        suffix = pathlib.Path(up.name).suffix.lower()
         if suffix == ".csv":
             try:
-                df = pd.read_csv(up_file)
+                df = pd.read_csv(up)
             except Exception as e:
                 st.error(f"CSV read error: {e}")
         elif suffix == ".ibt":
             try:
                 import irsdk, tempfile
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".ibt") as tmp:
-                    tmp.write(up_file.read()); tmp_path = tmp.name
+                    tmp.write(up.read()); tmp_path = tmp.name
                 ibt = None
                 if hasattr(irsdk, "IBT"): ibt = irsdk.IBT(tmp_path)
                 elif hasattr(irsdk, "ibt"): ibt = irsdk.ibt.IBT(tmp_path)
@@ -287,12 +269,14 @@ with colB:
         if notes: st.warning("Synthesized columns: " + ", ".join(notes))
         st.write(", ".join(list(df.columns)))
 
-# ===== Graphs =====
+# Graphs (distinct colors)
 st.markdown("---")
-if st.checkbox("Show graphs", value=False, key="graphs_toggle"):
-    if 'df' in locals() and df is not None:
-        st.subheader("Graphs (pick any numeric channels)")
-        numeric_cols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
+if show_charts and df is not None:
+    st.subheader("Graphs (pick any numeric channels)")
+    numeric_cols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
+    if not numeric_cols:
+        st.info("No numeric columns to plot.")
+    else:
         filter_text = st.text_input("Filter channels (contains)", "")
         if filter_text:
             numeric_cols = [c for c in numeric_cols if filter_text.lower() in c.lower()]
@@ -300,40 +284,65 @@ if st.checkbox("Show graphs", value=False, key="graphs_toggle"):
         selected = st.multiselect("Channels to plot", numeric_cols, default=default_pick)
         mode = st.radio("X axis", ["LapDistPct","Index"], index=0, horizontal=True)
         bylap = st.checkbox("Split by Lap", value=True)
+
+        # Color palette and cycle
+        palette = (px.colors.qualitative.Safe
+                   + px.colors.qualitative.Set2
+                   + px.colors.qualitative.Plotly)
+        color_cycle = palette * 5
+        trace_idx = 0
+
         if selected:
             if bylap and "Lap" in df.columns:
                 laps = sorted(pd.unique(df["Lap"]).tolist())
                 chosen_laps = st.multiselect("Which laps?", laps, default=laps[:min(3,len(laps))])
             else:
                 chosen_laps = [None]
-            import numpy as np
-            import plotly.graph_objects as go
             for ch in selected:
                 st.markdown(f"**{ch}**")
                 fig = go.Figure()
                 if chosen_laps == [None]:
                     x = df["LapDistPct"] if mode=="LapDistPct" and "LapDistPct" in df.columns else np.arange(len(df))
-                    fig.add_trace(go.Scatter(x=x, y=df[ch], mode="lines", name=ch))
+                    fig.add_trace(go.Scatter(
+                        x=x, y=df[ch], mode="lines", name=ch,
+                        line=dict(width=2.5, color=color_cycle[trace_idx % len(color_cycle)]),
+                        opacity=0.95
+                    ))
+                    trace_idx += 1
                 else:
                     for L in chosen_laps:
                         dlap = df[df["Lap"]==L]
                         x = dlap["LapDistPct"] if mode=="LapDistPct" and "LapDistPct" in dlap.columns else np.arange(len(dlap))
-                        fig.add_trace(go.Scatter(x=x, y=dlap[ch], mode="lines", name=f"Lap {L}"))
-                fig.update_layout(xaxis_title=mode, yaxis_title=ch, height=280)
+                        fig.add_trace(go.Scatter(
+                            x=x, y=dlap[ch], mode="lines", name=f"Lap {L}",
+                            line=dict(width=2.5, color=color_cycle[trace_idx % len(color_cycle)]),
+                            opacity=0.95
+                        ))
+                        trace_idx += 1
+
+                fig.update_layout(
+                    template="plotly_white",
+                    xaxis_title=mode,
+                    yaxis_title=ch,
+                    legend_orientation="h",
+                    legend_y=-0.25,
+                    margin=dict(t=30, b=50),
+                    hovermode="x unified",
+                    height=300
+                )
                 st.plotly_chart(fig, use_container_width=True)
         else:
-            st.info("Pick at least one channel to graph.")
-    else:
-        st.info("Upload telemetry first to unlock graphs.")
+            st.info("Pick at least one channel to plot.")
 
-# ===== Full raw table =====
-st.markdown("---")
-if 'df' in locals() and df is not None and st.checkbox("Show full raw table (first 1,000 rows)"):
+# Full table
+if show_all_table and df is not None:
+    st.markdown("---")
+    st.subheader("All data table (first 1,000 rows)")
     st.dataframe(df.head(1000), use_container_width=True)
 
-# ===== Corner Feedback =====
+# Corner feedback
 st.markdown("---")
-st.header("🧭 Corner Feedback — track-matched labels")
+st.header("Corner Feedback - track matched labels")
 corner_labels = tracks.get(track_pick, {}).get("corners", ["T1","T2","T3"])
 if "driver_feedback" not in st.session_state or st.session_state.get("_fb_track") != track_pick:
     st.session_state.driver_feedback = {c: {"feels":"No issue / skip","severity":0,"note":""} for c in corner_labels}
@@ -356,8 +365,9 @@ for i, c in enumerate(corner_labels):
 
 st.success("Feedback saved for this track.")
 
-# ===== Setup entry / upload =====
-st.markdown("---"); st.header("🛠️ Current Setup — enter or upload")
+# Setup entry/upload
+st.markdown("---")
+st.header("Current Setup - enter or upload")
 if "setup_current" not in st.session_state: st.session_state.setup_current = {}
 c1, c2, c3, c4 = st.columns(4)
 with c1:
@@ -386,16 +396,17 @@ if sup is not None:
         if suf == ".json":
             st.session_state.setup_current["uploaded_json"] = json.load(sup); st.success("Loaded JSON setup.")
         elif suf == ".csv":
-            import pandas as pd; sdf = pd.read_csv(sup)
+            sdf = pd.read_csv(sup)
             st.session_state.setup_current["uploaded_csv"] = sdf.to_dict(orient="list"); st.success("Loaded CSV setup.")
         else:
-            st.session_state.setup_current["uploaded_raw"] = sup.read().decode("utf-8", errors="ignore"); st.success("Attached raw text setup (not parsed)." )
+            st.session_state.setup_current["uploaded_raw"] = sup.read().decode("utf-8", errors="ignore"); st.success("Attached raw text setup (not parsed).")
     except Exception as e:
         st.error(f"Setup upload error: {e}")
 
-# ===== Export =====
-st.markdown("---"); st.header("📤 Export to ChatGPT (with rules, no auto suggestions)")
-generate_suggestions = st.checkbox("✅ Allow setup suggestions (opt-in)", value=False)
+# Export block
+st.markdown("---")
+st.header("Export to ChatGPT (with rules, no auto suggestions)")
+generate_suggestions = st.checkbox("Allow setup suggestions (opt-in)", value=False)
 is_problem = st.checkbox("This run has real problems", value=False)
 
 rules_path = pathlib.Path("ShearerPNW_Easy_Tuner_Editables/setup_rules_nextgen.json")
@@ -466,7 +477,7 @@ End of data.
 === END INSTRUCTIONS ===
 '''
 
-    telem_cols = list(df.columns) if 'df' in locals() and df is not None else []
+    telem_cols = list(df.columns) if (("df" in locals()) and (df is not None)) else []
     export_text = (
         CHATGPT_HEADER
         .replace("{{TRACK_NAME}}", json.dumps(track_pick))

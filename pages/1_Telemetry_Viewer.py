@@ -58,13 +58,45 @@ def shaded_corners(fig, segments):
                       annotation_text=label, annotation_position="top left",
                       opacity=0.08)
 
+import math
+
 def build_chatgpt_export(summary_dict):
-    def round_half(x): return round(float(x) * 2) / 2.0
-    if "pressures_ending_psi" in summary_dict:
-        for k, v in summary_dict["pressures_ending_psi"].items():
-            summary_dict["pressures_ending_psi"][k] = round_half(v)
+    # Round to nearest 0.5 safely; skip bad or missing values
+    def round_half_safe(x):
+        try:
+            f = float(x)
+            if math.isfinite(f):
+                return round(f * 2) / 2.0
+        except Exception:
+            return None
+        return None
+
+    # Clean pressures_ending_psi if present
+    pe = summary_dict.get("pressures_ending_psi")
+    if isinstance(pe, dict):
+        cleaned = {}
+        for k, v in pe.items():
+            rv = round_half_safe(v)
+            if rv is not None:
+                cleaned[k] = rv
+        summary_dict["pressures_ending_psi"] = cleaned
+
+    # Optionally sanitize ride heights to floats if present
+    rh = summary_dict.get("ride_heights_in")
+    if isinstance(rh, dict):
+        cleaned_rh = {}
+        for k, v in rh.items():
+            try:
+                f = float(v)
+                if math.isfinite(f):
+                    cleaned_rh[k] = float(f)
+            except Exception:
+                continue
+        summary_dict["ride_heights_in"] = cleaned_rh
+
     json_block = json.dumps(summary_dict, indent=2)
     return CHATGPT_HEADER.replace("{{TELEMETRY_JSON_PASTE_HERE}}", json_block)
+
 
 def coerce_min_columns(df: pd.DataFrame):
     """

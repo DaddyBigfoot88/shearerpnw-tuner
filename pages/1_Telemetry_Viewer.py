@@ -1,16 +1,16 @@
-
-# Telemetry Viewer — no auto-prefetch; fetch only when you click the button
-import io, json, os, pathlib, tempfile, re, mimetypes
+# Telemetry Viewer - AUTO-PREFETCH REAL TRACK IMAGES (no placeholders), Distinct Colors
+import io, json, os, pathlib, tempfile, math, re, mimetypes, time
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 import streamlit as st
+from PIL import Image
 import requests
 
 st.set_page_config(layout="wide")
 st.title("Telemetry Viewer")
-st.caption("Maps are cached locally. No auto-download. Click the sidebar button to fetch/refresh a map.")
+st.caption("First load will auto-download real track images from Wikimedia Commons for ALL tracks, cache them, and overwrite any placeholders.")
 
 def slug(s: str):
     return re.sub(r'[^a-z0-9_]+', '_', s.lower())
@@ -37,8 +37,7 @@ def save_tracks(tracks_obj):
         st.error(f"Failed to save tracks.json: {e}")
         return False
 
-ACCEPTABLE_LICENSES = {"public domain","cc0","cc-by","cc by","cc-by-sa","cc by-sa","cc-by 2.0","cc-by-sa 3.0","cc-by-sa 4.0"}
-UA = {"User-Agent": "ShearerPNW-TrackPrefetch/1.0 (educational use)"}
+ACCEPTABLE_LICENSES = {"public domain","cc0","cc-by","cc-by-sa","cc by","cc by-sa","cc-by 2.0","cc-by-sa 3.0","cc-by-sa 4.0"}
 
 def commons_search_image(query: str):
     api = "https://commons.wikimedia.org/w/api.php"
@@ -46,114 +45,124 @@ def commons_search_image(query: str):
         "action": "query",
         "format": "json",
         "generator": "search",
-        "gsrsearch": query + " track layout OR circuit map OR track map OR aerial OR satellite",
-        "gsrlimit": 12,
-        "gsrnamespace": 6,  # FILE namespace
+        "gsrsearch": query + " aerial OR satellite OR track map",
+        "gsrlimit": 10,
         "prop": "imageinfo",
         "iiprop": "url|extmetadata",
         "iiurlwidth": 2000,
         "origin": "*"
     }
-    r = requests.get(api, params=params, headers=UA, timeout=40)
+    r = requests.get(api, params=params, timeout=30)
     r.raise_for_status()
     data = r.json()
     if "query" not in data or "pages" not in data["query"]:
         return None
     pages = list(data["query"]["pages"].values())
-    # prefer layout-ish first
-    layout_pages, other_pages = [], []
     for p in pages:
-        title = (p.get("title") or "").lower()
-        if any(k in title for k in ("layout","map","circuit","track")):
-            layout_pages.append(p)
-        else:
-            other_pages.append(p)
-    pages = layout_pages + other_pages
-    for p in pages:
-        info = (p.get("imageinfo") or [{}])[0]
-        ext = info.get("extmetadata", {}) or {}
+        i = p.get("imageinfo", [{}])[0]
+        ext = i.get("extmetadata", {})
         lic = (ext.get("LicenseShortName", {}).get("value","") or ext.get("License", {}).get("value","")).lower()
         if any(k in lic for k in ACCEPTABLE_LICENSES):
-            artist_raw = (ext.get("Artist", {}).get("value","") or "")
-            artist = re.sub(r"<.*?>","", artist_raw).strip()
             return {
                 "title": p.get("title",""),
-                "url": info.get("url") or info.get("thumburl"),
+                "url": i.get("url") or i.get("thumburl"),
                 "license": ext.get("LicenseShortName", {}).get("value") or ext.get("License", {}).get("value",""),
-                "artist": artist,
-                "source": "https://commons.wikimedia.org/wiki/" + (p.get("title","").replace(" ", "_"))
+                "artist": ext.get("Artist", {}).get("value","").strip(),
+                "source": "https://commons.wikimedia.org/wiki/" + p.get("title","").replace(" ", "_")
             }
-    return None
+    # fallback
+    p = pages[0]
+    i = p.get("imageinfo", [{}])[0]
+    return {
+        "title": p.get("title",""),
+        "url": i.get("url") or i.get("thumburl"),
+        "license": i.get("extmetadata", {}).get("LicenseShortName", {}).get("value",""),
+        "artist": i.get("extmetadata", {}).get("Artist", {}).get("value","").strip(),
+        "source": "https://commons.wikimedia.org/wiki/" + p.get("title","").replace(" ", "_")
+    }
 
-def download_and_set(track_name: str, track_id: str, img_url: str, credit: dict, tracks_obj: dict):
+MIN_BYTES = 120_000  # files smaller than this are considered placeholders/too small
+
+def ensure_image(track_name: str, track_meta: dict, tracks_obj: dict, force=False):
+    local = track_meta.get("image")
+    if local and pathlib.Path(local).exists() and not force:
+        try:
+            size = pathlib.Path(local).stat().st_size
+            if size >= MIN_BYTES:
+                return local
+        except Exception:
+            pass  # fall through to refresh
+
+    q = track_name.split("(")[0].strip()
     try:
-        r = requests.get(img_url, headers=UA, timeout=60)
-        r.raise_for_status()
-    except Exception as e:
-        st.error(f"Download failed: {e}")
-        return False
-    ctype = r.headers.get("Content-Type","").split(";")[0].strip().lower()
-    ext = mimetypes.guess_extension(ctype) or os.path.splitext(img_url)[1] or ".jpg"
-    if ext.lower() not in (".png",".jpg",".jpeg",".webp",".svg"):
-        ext = ".jpg"
-    out_path = ASSETS_DIR / f"{track_id}{ext}"
-    with open(out_path, "wb") as f:
-        f.write(r.content)
-    if track_name in tracks_obj:
-        tracks_obj[track_name]["image"] = str(out_path)
-        tracks_obj[track_name]["credit"] = credit
-        save_tracks(tracks_obj)
-    return True
+        res = commons_search_image(q)
+        if res and res.get("url"):
+            r = requests.get(res["url"], timeout=60)
+            r.raise_for_status()
+            ctype = r.headers.get("Content-Type","").split(";")[0].strip().lower()
+            ext = mimetypes.guess_extension(ctype) or os.path.splitext(res["url"])[1] or ".jpg"
+            out_path = ASSETS_DIR / f"{track_meta.get('id','track')}{ext}"
+            with open(out_path, "wb") as f:
+                f.write(r.content)
+            tracks_obj[track_name]["image"] = str(out_path)
+            tracks_obj[track_name]["credit"] = {
+                "title": res.get("title",""),
+                "author": res.get("artist",""),
+                "license": res.get("license",""),
+                "source": res.get("source","")
+            }
+            save_tracks(tracks_obj)
+            return str(out_path)
+    except Exception:
+        pass
+    return local if (local and pathlib.Path(local).exists()) else None
 
-# Sidebar controls
+# ---------- PREFETCH ON START (one-time-ish) ----------
+tracks = load_tracks()
+if tracks:
+    # Try to fetch/refresh images for every track right away
+    with st.spinner("Prefetching track images (one-time)..."):
+        fetched = 0
+        for name, meta in tracks.items():
+            path = ensure_image(name, meta, tracks, force=True)  # force replaces placeholders
+            if path and pathlib.Path(path).exists():
+                fetched += 1
+        st.caption(f"Images cached: {fetched}/{len(tracks)}")
+
+# Sidebar (keep basic controls)
 with st.sidebar:
-    tracks = load_tracks()
     track_names = sorted(list(tracks.keys())) if tracks else ["Unknown Track"]
     default_idx = track_names.index("Watkins Glen International (Cup)") if "Watkins Glen International (Cup)" in track_names else 0
     track_pick = st.selectbox("Track", track_names, index=default_idx)
     track_info = tracks.get(track_pick, {"id":"unknown","corners": ["T1","T2","T3"]})
-    fetch_now = st.button("Fetch/Refresh this track map (one-time)")
-    up = st.file_uploader("Upload telemetry (.csv or .ibt)", type=["csv","ibt"])
+    up = st.file_uploader("Upload telemetry (.csv or .ibt)", type=["csv","ibt"])    
+    show_charts = st.checkbox("Show graphs", value=False)
+    show_all_table = st.checkbox("Show full raw table", value=False)
+    run_type = st.radio("Run type", ["Practice","Qualifying","Race"], index=0, horizontal=True)
 
 # Track image
 colA, colB = st.columns([1.2, 1.8])
 with colA:
     st.subheader("Track")
-    img_path = track_info.get("image")
-    if fetch_now:
-        q = track_pick.split("(")[0].strip()
-        result = commons_search_image(q)
-        if result and result.get("url"):
-            ok = download_and_set(
-                track_pick,
-                track_info.get("id","unknown"),
-                result["url"],
-                {
-                    "title": result.get("title",""),
-                    "author": result.get("artist",""),
-                    "license": result.get("license",""),
-                    "source": result.get("source","")
-                },
-                tracks
-            )
-            if ok:
-                img_path = tracks.get(track_pick, {}).get("image")
-                st.success("Map fetched and cached.")
-        else:
-            st.error("Could not find a suitable image. Try again later.")
-
+    img_path = ensure_image(track_pick, track_info, tracks, force=False)
     if img_path and pathlib.Path(img_path).exists():
         st.image(img_path, use_container_width=True, caption=str(track_pick))
     else:
-        st.warning("No image cached yet. Use the button in the sidebar to fetch it once.")
+        st.warning("Could not fetch an image for this track yet. It will try again on reload.")
 
-# Telemetry load (CSV/IBT minimal)
+# Channels & telemetry loader
 with colB:
     st.subheader("Channels and File info")
     df = None
-
     def coerce_min_columns(df):
         notes = []
+        for col in ("Throttle","Brake"):
+            if col in df.columns:
+                try:
+                    if float(df[col].max()) <= 1.5:
+                        df[col] = (df[col] * 100.0).clip(0,100)
+                except Exception: 
+                    pass
         if "Lap" not in df.columns:
             df["Lap"] = 1; notes.append("Lap")
         if "LapDistPct" not in df.columns:
@@ -198,14 +207,9 @@ with colB:
                     if arr is not None: data[ch] = arr
                 if not data: raise RuntimeError("No known channels found in IBT.")
                 df = pd.DataFrame(data).dropna(how="all")
-                # normalize throttle/brake to percent if they look 0..1
                 for col in ("Throttle","Brake"):
-                    if col in df.columns:
-                        try:
-                            if float(df[col].max()) <= 1.5:
-                                df[col] = (df[col] * 100.0).clip(0,100)
-                        except Exception:
-                            pass
+                    if col in df.columns and df[col].max() <= 1.5:
+                        df[col] = (df[col] * 100.0).clip(0,100)
                 if "LapDistPct" not in df.columns:
                     if "LapDist" in df.columns and df["LapDist"].max() > 0:
                         if "Lap" not in df.columns: df["Lap"] = 1
@@ -231,6 +235,212 @@ with colB:
         if notes: st.warning("Synthesized columns: " + ", ".join(notes))
         st.write(", ".join(list(df.columns)))
 
-# Keep the rest minimal to avoid syntax issues
+# Graphs (distinct colors)
 st.markdown("---")
-st.caption("ShearerPNW Telemetry Viewer — no auto-prefetch build")
+if show_charts and df is not None:
+    st.subheader("Graphs (pick any numeric channels)")
+    numeric_cols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
+    if not numeric_cols:
+        st.info("No numeric columns to plot.")
+    else:
+        filter_text = st.text_input("Filter channels (contains)", "")
+        if filter_text:
+            numeric_cols = [c for c in numeric_cols if filter_text.lower() in c.lower()]
+        default_pick = [c for c in ["Speed","Throttle","Brake","SteeringWheelAngle"] if c in numeric_cols][:3]
+        selected = st.multiselect("Channels to plot", numeric_cols, default=default_pick)
+        mode = st.radio("X axis", ["LapDistPct","Index"], index=0, horizontal=True)
+        bylap = st.checkbox("Split by Lap", value=True)
+        palette = (px.colors.qualitative.Safe + px.colors.qualitative.Set2 + px.colors.qualitative.Plotly)
+        color_cycle = palette * 5
+        trace_idx = 0
+        if selected:
+            if bylap and "Lap" in df.columns:
+                laps = sorted(pd.unique(df["Lap"]).tolist())
+                chosen_laps = st.multiselect("Which laps?", laps, default=laps[:min(3,len(laps))])
+            else:
+                chosen_laps = [None]
+            for ch in selected:
+                st.markdown(f"**{ch}**")
+                fig = go.Figure()
+                if chosen_laps == [None]:
+                    x = df["LapDistPct"] if mode=="LapDistPct" and "LapDistPct" in df.columns else np.arange(len(df))
+                    fig.add_trace(go.Scatter(x=x, y=df[ch], mode="lines", name=ch,
+                                             line=dict(width=2.5, color=color_cycle[trace_idx % len(color_cycle)]),
+                                             opacity=0.95))
+                    trace_idx += 1
+                else:
+                    for L in chosen_laps:
+                        dlap = df[df["Lap"]==L]
+                        x = dlap["LapDistPct"] if mode=="LapDistPct" and "LapDistPct" in dlap.columns else np.arange(len(dlap))
+                        fig.add_trace(go.Scatter(x=x, y=dlap[ch], mode="lines", name=f"Lap {L}",
+                                                 line=dict(width=2.5, color=color_cycle[trace_idx % len(color_cycle)]),
+                                                 opacity=0.95))
+                        trace_idx += 1
+                fig.update_layout(template="plotly_white", xaxis_title=mode, yaxis_title=ch,
+                                  legend_orientation="h", legend_y=-0.25, margin=dict(t=30,b=50),
+                                  hovermode="x unified", height=300)
+                st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("Pick at least one channel to plot.")
+
+# Full table
+if show_all_table and df is not None:
+    st.markdown("---")
+    st.subheader("All data table (first 1,000 rows)")
+    st.dataframe(df.head(1000), use_container_width=True)
+
+# Corner feedback
+st.markdown("---")
+st.header("Corner Feedback")
+corner_labels = tracks.get(track_pick, {}).get("corners", ["T1","T2","T3"])
+if "driver_feedback" not in st.session_state or st.session_state.get("_fb_track") != track_pick:
+    st.session_state.driver_feedback = {c: {"feels":"No issue / skip","severity":0,"note":""} for c in corner_labels}
+    st.session_state._fb_track = track_pick
+
+cols = st.columns(3)
+DEFAULT_FEELINGS = [
+    "No issue / skip",
+    "Loose on entry","Loose mid-corner","Loose on exit",
+    "Tight on entry","Tight mid-corner","Tight on exit",
+    "Understeer everywhere","Oversteer everywhere",
+    "Porpoising / Bottoming","Brakes locking","Traction wheelspin","Other"]
+for i, c in enumerate(corner_labels):
+    with cols[i % 3]:
+        st.markdown(f"**{c}**")
+        feels = st.selectbox(f"{c} feel", DEFAULT_FEELINGS, index=0, key=f"feel_{slug(c)}")
+        severity = st.slider(f"{c} severity", 0, 10, st.session_state.driver_feedback[c].get("severity",0), key=f"sev_{slug(c)}")
+        note = st.text_input(f"{c} note (optional)", value=st.session_state.driver_feedback[c].get("note",""), key=f"note_{slug(c)}")
+        st.session_state.driver_feedback[c] = {"feels": feels, "severity": int(severity), "note": note}
+
+st.success("Feedback saved for this track.")
+
+# Setup entry/upload
+st.markdown("---")
+st.header("Current Setup")
+if "setup_current" not in st.session_state: st.session_state.setup_current = {}
+c1, c2, c3, c4 = st.columns(4)
+with c1:
+    LFp = st.number_input("LF pressure", 5.0, 80.0, 22.0, 0.5)
+    LRp = st.number_input("LR pressure", 5.0, 80.0, 22.0, 0.5)
+with c2:
+    RFp = st.number_input("RF pressure", 5.0, 80.0, 22.0, 0.5)
+    RRp = st.number_input("RR pressure", 5.0, 80.0, 22.0, 0.5)
+with c3:
+    xwt = st.number_input("Crossweight %", 40.0, 60.0, 50.0, 0.1)
+    tb = st.number_input("Rear trackbar (in)", 3.0, 14.0, 8.0, 0.25)
+with c4:
+    dp = st.number_input("Diff preload (ft-lbs)", 0, 100, 40, 5)
+    gear_note = st.text_input("Gear note", "N/A")
+
+st.session_state.setup_current.update({
+    "tires": {"LF":LFp, "RF":RFp, "LR":LRp, "RR":RRp},
+    "chassis": {"crossweight_percent": xwt, "rear_trackbar_in": tb},
+    "rear_end": {"diff_preload_ftlbs": dp, "gear_note": gear_note}
+})
+
+sup = st.file_uploader("Upload setup", type=["json","csv","sto","txt"], key="setup_up")
+if sup is not None:
+    suf = pathlib.Path(sup.name).suffix.lower()
+    try:
+        if suf == ".json":
+            st.session_state.setup_current["uploaded_json"] = json.load(sup); st.success("Loaded JSON setup.")
+        elif suf == ".csv":
+            sdf = pd.read_csv(sup)
+            st.session_state.setup_current["uploaded_csv"] = sdf.to_dict(orient="list"); st.success("Loaded CSV setup.")
+        else:
+            st.session_state.setup_current["uploaded_raw"] = sup.read().decode("utf-8", errors="ignore"); st.success("Attached raw text setup (not parsed).")
+    except Exception as e:
+        st.error(f"Setup upload error: {e}")
+
+# Export block
+st.markdown("---")
+st.header("Export to ChatGPT (with rules, no auto suggestions)")
+generate_suggestions = st.checkbox("Allow setup suggestions (opt-in)", value=False)
+is_problem = st.checkbox("This run has real problems", value=False)
+
+rules_path = pathlib.Path("ShearerPNW_Easy_Tuner_Editables/setup_rules_nextgen.json")
+if not rules_path.exists():
+    st.error("Missing ShearerPNW_Easy_Tuner_Editables/setup_rules_nextgen.json")
+else:
+    setup_rules = json.loads(rules_path.read_text())
+
+    CHATGPT_HEADER = '''(Paste this whole block into ChatGPT and press Enter.)
+
+=== CHATGPT SETUP COACH (TRACK-AWARE FEEDBACK) ===
+You are a NASCAR Next Gen setup coach.
+
+ONLY provide setup suggestions if BOTH are true:
+- generate_suggestions == true
+- is_problem == true
+Otherwise, acknowledge the data and stop.
+
+Rules you must follow:
+- Use ONLY parameters listed under setup_rules.allowed_parameters.
+- Respect hard ranges and increments in setup_rules.limits. If a suggestion would go out of bounds, clamp to the nearest allowed value and say you clamped it.
+- Shocks: clicks are integers within min_clicks..max_clicks.
+- Tire pressures: change in increments_psig (e.g., 0.5 psi). Never go below min_psig or above max_psig.
+- Diff preload: use only values between min_ftlbs and max_ftlbs.
+- Ride heights, cambers, toes: stay within listed bounds and increments.
+- Do not invent settings or parts that are not in setup_rules.
+- Keep the output short and practical.
+
+Output format (when suggestions are allowed):
+1) Key Findings (one line per corner with a problem)
+2) Setup Changes (grouped by Tires, Chassis, Suspension, Rear End; include units & clicks)
+3) Why This Helps (short reasons)
+4) Next Run Checklist (what to feel for)
+
+SESSION CONTEXT:
+car: NASCAR Next Gen
+track: {{TRACK_NAME}}
+run_type: {{RUN_TYPE}}
+
+corner_labels: {{CORNER_LABELS_JSON}}
+
+OK—here is the data:
+
+corner_feedback_json = 
+```json
+{{CORNER_FEEDBACK_JSON}}
+```
+
+setup_rules = 
+```json
+{{SETUP_RULES_JSON}}
+```
+
+setup_current = 
+```json
+{{SETUP_CURRENT_JSON}}
+```
+
+telemetry_columns_present = 
+```json
+{{TELEM_COLS_JSON}}
+```
+
+gates = {"generate_suggestions": {{GATE_GEN}}, "is_problem": {{GATE_PROB}}}
+
+End of data.
+=== END INSTRUCTIONS ===
+'''
+
+    telem_cols = list(df.columns) if (("df" in locals()) and (df is not None)) else []
+    export_text = (
+        CHATGPT_HEADER
+        .replace("{{TRACK_NAME}}", json.dumps(track_pick))
+        .replace("{{RUN_TYPE}}", json.dumps(run_type))
+        .replace("{{CORNER_LABELS_JSON}}", json.dumps(tracks.get(track_pick, {}).get("corners", []), indent=2))
+        .replace("{{CORNER_FEEDBACK_JSON}}", json.dumps(st.session_state.driver_feedback, indent=2))
+        .replace("{{SETUP_RULES_JSON}}", json.dumps(setup_rules, indent=2))
+        .replace("{{SETUP_CURRENT_JSON}}", json.dumps(st.session_state.setup_current, indent=2))
+        .replace("{{TELEM_COLS_JSON}}", json.dumps(telem_cols, indent=2))
+        .replace("{{GATE_GEN}}", "true" if generate_suggestions else "false")
+        .replace("{{GATE_PROB}}", "true" if is_problem else "false")
+    )
+
+    st.download_button("Download ChatGPT export (.txt)",
+                       data=export_text.encode("utf-8"),
+                       file_name="chatgpt_trackaware_export.txt",
+                       mime="text/plain")
+    st.text_area("Preview", export_text, height=360)

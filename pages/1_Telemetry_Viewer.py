@@ -1,6 +1,6 @@
 
-# Telemetry Viewer - No UI Image Manager; Auto-fetch real images; Distinct colors
-import io, json, os, pathlib, tempfile, math, re, mimetypes
+# Telemetry Viewer - AUTO-PREFETCH REAL TRACK IMAGES (no placeholders), Distinct Colors
+import io, json, os, pathlib, tempfile, math, re, mimetypes, time
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
@@ -11,7 +11,7 @@ import requests
 
 st.set_page_config(layout="wide")
 st.title("Telemetry Viewer")
-st.caption("Track images auto-fetched from Wikimedia Commons (first run), then cached. Telemetry graphs with distinct colors, setup entry/upload, strict ChatGPT export.")
+st.caption("First load will auto-download real track images from Wikimedia Commons for ALL tracks, cache them, and overwrite any placeholders.")
 
 def slug(s: str):
     return re.sub(r'[^a-z0-9_]+', '_', s.lower())
@@ -82,12 +82,18 @@ def commons_search_image(query: str):
         "source": "https://commons.wikimedia.org/wiki/" + p.get("title","").replace(" ", "_")
     }
 
-def ensure_image(track_name: str, track_meta: dict, tracks_obj: dict):
-    # If local image exists, return it
+MIN_BYTES = 120_000  # files smaller than this are considered placeholders/too small
+
+def ensure_image(track_name: str, track_meta: dict, tracks_obj: dict, force=False):
     local = track_meta.get("image")
-    if local and pathlib.Path(local).exists():
-        return local
-    # else, try fetch
+    if local and pathlib.Path(local).exists() and not force:
+        try:
+            size = pathlib.Path(local).stat().st_size
+            if size >= MIN_BYTES:
+                return local
+        except Exception:
+            pass  # fall through to refresh
+
     q = track_name.split("(")[0].strip()
     try:
         res = commons_search_image(q)
@@ -100,16 +106,32 @@ def ensure_image(track_name: str, track_meta: dict, tracks_obj: dict):
             with open(out_path, "wb") as f:
                 f.write(r.content)
             tracks_obj[track_name]["image"] = str(out_path)
-            tracks_obj[track_name]["credit"] = {"title": res.get("title",""), "author": res.get("artist",""), "license": res.get("license",""), "source": res.get("source","")}
+            tracks_obj[track_name]["credit"] = {
+                "title": res.get("title",""),
+                "author": res.get("artist",""),
+                "license": res.get("license",""),
+                "source": res.get("source","")
+            }
             save_tracks(tracks_obj)
             return str(out_path)
-    except Exception as e:
-        st.info(f"Could not auto-fetch image for {track_name}.")
-    return None
+    except Exception:
+        pass
+    return local if (local and pathlib.Path(local).exists()) else None
 
-# Sidebar
+# ---------- PREFETCH ON START (one-time-ish) ----------
+tracks = load_tracks()
+if tracks:
+    # Try to fetch/refresh images for every track right away
+    with st.spinner("Prefetching track images (one-time)..."):
+        fetched = 0
+        for name, meta in tracks.items():
+            path = ensure_image(name, meta, tracks, force=True)  # force replaces placeholders
+            if path and pathlib.Path(path).exists():
+                fetched += 1
+        st.caption(f"Images cached: {fetched}/{len(tracks)}")
+
+# Sidebar (keep basic controls)
 with st.sidebar:
-    tracks = load_tracks()
     track_names = sorted(list(tracks.keys())) if tracks else ["Unknown Track"]
     default_idx = track_names.index("Watkins Glen International (Cup)") if "Watkins Glen International (Cup)" in track_names else 0
     track_pick = st.selectbox("Track", track_names, index=default_idx)
@@ -119,18 +141,15 @@ with st.sidebar:
     show_all_table = st.checkbox("Show full raw table", value=False)
     run_type = st.radio("Run type", ["Practice","Qualifying","Race"], index=0, horizontal=True)
 
-# Track image (no UI, just fetch if needed)
+# Track image
 colA, colB = st.columns([1.2, 1.8])
 with colA:
     st.subheader("Track")
-    img_path = track_info.get("image")
-    if not (img_path and pathlib.Path(img_path).exists()):
-        with st.spinner("Fetching track image (first run only)..."):
-            img_path = ensure_image(track_pick, track_info, tracks)
+    img_path = ensure_image(track_pick, track_info, tracks, force=False)
     if img_path and pathlib.Path(img_path).exists():
         st.image(img_path, use_container_width=True, caption=str(track_pick))
     else:
-        st.warning("No image found and auto-fetch failed. It will try again next run.")
+        st.warning("Could not fetch an image for this track yet. It will try again on reload.")
 
 # Channels & telemetry loader
 with colB:

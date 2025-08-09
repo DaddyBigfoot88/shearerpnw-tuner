@@ -3,7 +3,7 @@ import os
 import time
 import json
 import tempfile
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 import streamlit as st
 import pandas as pd
@@ -46,15 +46,17 @@ def get_session_info_safe(ir) -> str:
 
 def discover_channel_names(ir) -> List[str]:
     """Grab all channel names from var headers if available."""
-    names = []
+    names: List[str] = []
     try:
         ir.freeze_var_buffer_latest()
         headers = getattr(ir, "_var_headers", None)
         if headers:
-            names = [h.get("name") for h in headers if isinstance(h, dict) and h.get("name")]
+            for h in headers:
+                if isinstance(h, dict) and h.get("name"):
+                    names.append(h["name"])
     except Exception:
         pass
-    # unique order-preserving
+    # unique, keep order
     seen = set()
     out = []
     for n in names:
@@ -66,10 +68,10 @@ def discover_channel_names(ir) -> List[str]:
 def parse_channels(text: str) -> List[str]:
     return [c.strip() for c in text.split(",") if c.strip()]
 
-def collect_ibt(ibt_path: str, want_channels: List[str] | None, map_all: bool, max_seconds: int = 600) -> Dict[str, Any]:
+def collect_ibt(ibt_path: str, want_channels: Optional[List[str]], map_all: bool, max_seconds: int = 600) -> Dict[str, Any]:
     """
     Read an IBT file using pyirsdk test_file mode.
-    If map_all == True, gather *all* channels present.
+    If map_all == True, include every channel present.
     Returns dict with rows, channels_found, session_info_yaml, meta, channel_map.
     channel_map: list of {name, first_value}
     """
@@ -77,30 +79,35 @@ def collect_ibt(ibt_path: str, want_channels: List[str] | None, map_all: bool, m
     if not ir.startup(test_file=ibt_path):
         raise RuntimeError("Failed to initialize pyirsdk with IBT file.")
 
-    time.sleep(0.05)
+    time.sleep(0.05)  # give buffers a beat
 
     session_info_yaml = get_session_info_safe(ir)
 
-    # discover channels present in file
+    # discover channels in file
     names_in_file = set(discover_channel_names(ir))
+
     if map_all:
         channels_found = list(names_in_file) if names_in_file else (want_channels or [])
     else:
-        channels_found = [c for c in (want_channels or []) if (not names_in_file or c in names_in_file)]
+        # if we discovered names, filter requested against them; otherwise just trust requested
+        if names_in_file:
+            channels_found = [c for c in (want_channels or []) if c in names_in_file]
+        else:
+            channels_found = (want_channels or [])
 
-    # always include Lap and SessionTime when present
+    # always include helpers when present
     for must in ["Lap", "SessionTime"]:
         if (not names_in_file or must in names_in_file) and must not in channels_found:
             channels_found.append(must)
 
-    rows = []
+    rows: List[Dict[str, Any]] = []
     last_session_time = None
     start_time = time.time()
-    channel_map = {}  # name -> first non-None value
+    channel_map: Dict[str, Any] = {}
 
     while True:
         ir.freeze_var_buffer_latest()
-        sample = {}
+        sample: Dict[str, Any] = {}
         for ch in channels_found:
             try:
                 v = ir[ch]
@@ -108,6 +115,7 @@ def collect_ibt(ibt_path: str, want_channels: List[str] | None, map_all: bool, m
                 if ch not in channel_map and v is not None:
                     channel_map[ch] = v
             except Exception:
+                # channel missing for this tick
                 pass
 
         if not sample:
@@ -115,7 +123,7 @@ def collect_ibt(ibt_path: str, want_channels: List[str] | None, map_all: bool, m
 
         stime = sample.get("SessionTime", None)
         if last_session_time is not None and stime == last_session_time:
-            # end of file
+            # EOF
             break
         last_session_time = stime
 
@@ -131,7 +139,6 @@ def collect_ibt(ibt_path: str, want_channels: List[str] | None, map_all: bool, m
         "mapped_all": map_all,
     }
 
-    # turn channel_map into a stable list for display/export
     ch_map_list = [{"name": k, "first_value": channel_map.get(k, None)} for k in channels_found]
 
     ir.shutdown()
@@ -147,18 +154,19 @@ def collect_ibt(ibt_path: str, want_channels: List[str] | None, map_all: bool, m
 def summarize_for_chatgpt(rows: List[Dict[str, Any]], channels: List[str]) -> Dict[str, Any]:
     by_lap: Dict[int, Dict[str, Any]] = {}
     for r in rows:
-        lap = r.get("Lap", None)
+        lap_raw = r.get("Lap", None)
         try:
-            lap = int(lap) if lap is not None else -1
+            lap = int(lap_raw) if lap_raw is not None else -1
         except Exception:
             lap = -1
         if lap < 0:
             continue
-        b = by_lap.setdefault(lap, {"count": 0, "sums": {}})
-        b["count"] += 1
+
+        bucket = by_lap.setdefault(lap, {"count": 0, "sums": {}})
+        bucket["count"] += 1
         for k, v in r.items():
             if isinstance(v, (int, float)):
-                b["sums"][k] = b["sums"].get(k, 0.0) + float(v)
+                bucket["sums"][k] = bucket["sums"].get(k, 0.0) + float(v)
 
     lap_stats = []
     for lap, b in sorted(by_lap.items()):
@@ -189,7 +197,7 @@ def summarize_for_chatgpt(rows: List[Dict[str, Any]], channels: List[str]) -> Di
     }
 
 def setup_suggestions_stub(summary: Dict[str, Any]) -> List[str]:
-    out = []
+    out: List[str] = []
     best_lap = summary.get("guessBestLap")
     laps = summary.get("laps", [])
     target = next((l for l in laps if l.get("Lap") == best_lap), None)
@@ -210,4 +218,120 @@ def setup_suggestions_stub(summary: Dict[str, Any]) -> List[str]:
 
 # ----------------- UI -----------------
 PRESETS = {
-    "Minimal (fast)": "Lap, LapDistPct, Speed, Throttle, Brake, Gear, RPM, SteeringWheelAngle
+    "Minimal (fast)": "Lap, LapDistPct, Speed, Throttle, Brake, Gear, RPM, SteeringWheelAngle, LatAccel, LongAccel, TrackTemp, FuelLevel",
+    "Handling & Balance": "Lap, LapDistPct, Speed, Throttle, Brake, SteeringWheelAngle, LatAccel, LongAccel, Yaw, Pitch, Roll, WheelSlipFL, WheelSlipFR, WheelSlipRL, WheelSlipRR, TireCarcassTempFL, TireCarcassTempFR, TireCarcassTempRL, TireCarcassTempRR",
+    "Tires: Temps & Pressures": "LFtempCL, LFtempCM, LFtempCR, RFtempCL, RFtempCM, RFtempCR, LRtempCL, LRtempCM, LRtempCR, RRtempCL, RRtempCM, RRtempCR, LFpressure, RFpressure, LRpressure, RRpressure, LFwear, RFwear, LRwear, RRwear",
+    "Ride Height / Platform": "LFrideHeight, RFrideHeight, LRrideHeight, RRrideHeight, CFSRrideHeight, SplitterHeight, Rake, AeroBalance, Downforce, Drag",
+    "Shocks & Travel": "LFshockDefl, RFshockDefl, LRshockDefl, RRshockDefl, LFshockVel, RFshockVel, LRshockVel, RRshockVel, LFshockPos, RFshockPos, LRshockPos, RRshockPos",
+    "Wheel speed & Drivetrain": "WheelSpeedFL, WheelSpeedFR, WheelSpeedRL, WheelSpeedRR, Clutch, EngineTorque, Power, SlipRatioFL, SlipRatioFR, SlipRatioRL, SlipRatioRR",
+    "Laps / Flags / Incidents": "Lap, LapBestLap, LapBestLapTime, SessionTime, PlayerCarMyIncidentCount, PlayerCarDriverIncidentCount, PlayerCarTeamIncidentCount",
+    "GPS / Line": "Lat, Lon",
+}
+
+with st.expander("Quick presets"):
+    cols = st.columns(2)
+    keys = list(PRESETS.keys())
+    for i, k in enumerate(keys):
+        if cols[i % 2].button(k):
+            st.session_state["channels_text"] = PRESETS[k]
+
+map_all = st.checkbox("Map all sensors (include every channel in the file)", value=False)
+
+default_channels = PRESETS["Minimal (fast)"]
+channels_text = st.text_area(
+    "Channels (comma-separated)",
+    value=st.session_state.get("channels_text", default_channels),
+    height=110,
+    disabled=map_all,
+)
+
+uploaded = st.file_uploader("Drop your .ibt file", type=["ibt"])
+st.caption("If **Map all sensors** is on, I’ll auto-include every channel found in the file.")
+
+run = st.button("Process IBT", type="primary", disabled=uploaded is None)
+
+# ----------------- Run -----------------
+if run and uploaded:
+    with st.spinner("Reading IBT…"):
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".ibt") as tmp:
+            tmp.write(uploaded.getvalue())
+            ibt_path = tmp.name
+        try:
+            want = parse_channels(channels_text) if not map_all else None
+            data = collect_ibt(ibt_path, want, map_all=map_all)
+        except Exception as e:
+            st.error(f"Parse failed: {e}")
+            st.stop()
+
+    rows = data["rows"]
+    channels_found = data["channels_found"]
+    if not rows:
+        st.error("No samples collected. This IBT may be empty or unsupported.")
+        st.stop()
+
+    st.success(f"Read {len(rows)} samples • Channels found: {len(channels_found)}")
+
+    # DataFrame with found channels
+    # ensure Lap and SessionTime show first if present
+    ordered = []
+    for k in ["Lap", "SessionTime"]:
+        if k in channels_found:
+            ordered.append(k)
+    for k in channels_found:
+        if k not in ordered:
+            ordered.append(k)
+    df = pd.DataFrame(rows, columns=ordered)
+
+    # Downloads: CSV
+    csv_bytes = df.to_csv(index=False).encode("utf-8")
+    st.download_button(
+        "⬇️ Download CSV",
+        data=csv_bytes,
+        file_name=f"{os.path.splitext(uploaded.name)[0]}.csv",
+        mime="text/csv",
+        use_container_width=True,
+    )
+
+    # Build ChatGPT summary JSON
+    summary = summarize_for_chatgpt(rows, channels_found)
+    json_obj = {
+        "meta": data["meta"],
+        "summary": summary,
+        "sessionInfoYAML": data["session_info_yaml"][:200000],  # clip huge YAML just in case
+    }
+    json_bytes = json.dumps(json_obj, indent=2).encode("utf-8")
+    st.download_button(
+        "⬇️ Download ChatGPT JSON",
+        data=json_bytes,
+        file_name=f"{os.path.splitext(uploaded.name)[0]}.summary.json",
+        mime="application/json",
+        use_container_width=True,
+    )
+
+    # Summary preview
+    st.markdown("### Summary Preview")
+    st.write(summary["plainSummary"])
+    with st.expander("Lap stats (first 30)"):
+        st.dataframe(pd.DataFrame(summary["laps"][:30]))
+
+    # Setup suggestions (placeholder)
+    st.markdown("### Setup Suggestions (prototype)")
+    for s in setup_suggestions_stub(summary):
+        st.write(s)
+
+    # Channel map display + download
+    st.markdown("### Channel Map")
+    ch_map_df = pd.DataFrame(data["channel_map"])
+    st.dataframe(ch_map_df, use_container_width=True, height=280)
+    ch_map_csv = ch_map_df.to_csv(index=False).encode("utf-8")
+    st.download_button(
+        "⬇️ Download Channel Map (CSV)",
+        data=ch_map_csv,
+        file_name=f"{os.path.splitext(uploaded.name)[0]}.channel_map.csv",
+        mime="text/csv",
+        use_container_width=True,
+    )
+
+    # Session YAML peek
+    with st.expander("SessionInfo (YAML) — first 2000 chars"):
+        st.code((data["session_info_yaml"] or "")[:2000], language="yaml")

@@ -495,6 +495,7 @@ corner_feedback_json =
 {{CORNER_FEEDBACK_JSON}}
 
 
+
 corner_labels: {{CORNER_LABELS_JSON}}
 
 OK—here is the data:
@@ -540,26 +541,26 @@ End of data.
 === END INSTRUCTIONS ===
 '''
 
-        export_text = (
-            CHATGPT_HEADER
-            .replace("{{TRACK_NAME}}", json.dumps(track_pick))
-            .replace("{{RUN_TYPE}}", json.dumps(run_type))
-            .replace("{{BASE_TEMP}}", json.dumps(baseline_temp))
-            .replace("{{CUR_TEMP}}", json.dumps(current_temp))
-            .replace("{{CORNER_LABELS_JSON}}", json.dumps(tracks.get(track_pick, {}).get("corners", []), indent=2))
-            .replace("{{TRACK_META_JSON}}", json.dumps(track_meta_pick, indent=2))
-            .replace("{{COACH_RULES_JSON}}", json.dumps(coach_rules_slim, indent=2))
-            .replace("{{CORNER_FEEDBACK_JSON}}", json.dumps(st.session_state.driver_feedback, indent=2))
-            .replace("{{SETUP_RULES_JSON}}", json.dumps(setup_rules, indent=2))
-            .replace("{{SETUP_CURRENT_JSON}}", json.dumps(st.session_state.setup_current, indent=2))
-            .replace("{{TELEM_COLS_JSON}}", json.dumps(telem_cols, indent=2))
-            .replace("{{TELEM_STATS_JSON}}", json.dumps(telemetry_stats, indent=2))
-            .replace("{{GATE_GEN}}", "true" if generate_suggestions else "false")
-            .replace("{{GATE_PROB}}", "true" if is_problem else "false")
-        )
+ export_text = (
+        CHATGPT_HEADER
+        .replace("{{TRACK_NAME}}", json.dumps(track_pick))
+        .replace("{{RUN_TYPE}}", json.dumps(run_type))
+        .replace("{{BASE_TEMP}}", json.dumps(baseline_temp))
+        .replace("{{CUR_TEMP}}", json.dumps(current_temp))
+        .replace("{{CORNER_LABELS_JSON}}", json.dumps(tracks.get(track_pick, {}).get("corners", []), indent=2))
+        .replace("{{TRACK_META_JSON}}", json.dumps(track_meta_pick, indent=2))
+        .replace("{{COACH_RULES_JSON}}", json.dumps(coach_rules_slim, indent=2))
+        .replace("{{CORNER_FEEDBACK_JSON}}", json.dumps(st.session_state.driver_feedback, indent=2))
+        .replace("{{SETUP_RULES_JSON}}", json.dumps(setup_rules, indent=2))
+        .replace("{{SETUP_CURRENT_JSON}}", json.dumps(st.session_state.setup_current, indent=2))
+        .replace("{{TELEM_COLS_JSON}}", json.dumps(telem_cols, indent=2))
+        .replace("{{TELEM_STATS_JSON}}", json.dumps(telemetry_stats, indent=2))
+        .replace("{{GATE_GEN}}", "true" if generate_suggestions else "false")
+        .replace("{{GATE_PROB}}", "true" if is_problem else "false")
+    )
 
-        st.download_button("Download ChatGPT export (.txt)",
-                           data=export_text.encode("utf-8"),
-                           file_name="chatgpt_trackaware_export.txt",
-                           mime="text/plain")
-        st.text_area("Preview", export_text, height=360)
+    st.download_button("Download ChatGPT export (.txt)",
+                       data=export_text.encode("utf-8"),
+                       file_name="chatgpt_trackaware_export.txt",
+                       mime="text/plain")
+    st.text_area("Preview", export_text, height=360)

@@ -137,118 +137,54 @@ with info_mid:
                 df = pd.read_csv(up)
             except Exception as e:
                 st.error(f"CSV read error: {e}")
-elif suffix == ".ibt":
-    try:
-        import irsdk
-        import tempfile as _tmp
-        # write upload to a temp file; irsdk wants a real path
-        with _tmp.NamedTemporaryFile(delete=False, suffix=".ibt") as _f:
-            _f.write(up.read())
-            tmp_path = _f.name
-
-        # ✅ construct with NO args, then open(tmp_path)
-        if hasattr(irsdk, "IBT"):
-            ibt = irsdk.IBT()
-        elif hasattr(irsdk, "ibt"):
-            ibt = irsdk.ibt.IBT()
-        else:
-            raise RuntimeError("pyirsdk.IBT class not found")
-
-        if hasattr(ibt, "open"):
-            ibt.open(tmp_path)
-
-        # try to pull common channels first
-        want = ["Lap","LapDistPct","LapDist","Speed","Throttle","Brake","SteeringWheelAngle","YawRate"]
-        data = {}
-
-        def _try_get(ch_name):
-            for getter in ("get_channel_data_by_name","get","getVar","get_var"):
-                fn = getattr(ibt, getter, None)
-                if callable(fn):
-                    try:
-                        val = fn(ch_name)
-                        if val is not None:
-                            return val
-                    except Exception:
-                        pass
-            return None
-
-        for ch in want:
-            arr = _try_get(ch)
-            if arr is not None:
+        elif suffix == ".ibt":
+            try:
+                import irsdk, tempfile
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".ibt") as tmp:
+                    tmp.write(up.read()); tmp_path = tmp.name
+                ibt = None
+                if hasattr(irsdk, "IBT"): ibt = irsdk.IBT(tmp_path)
+                elif hasattr(irsdk, "ibt"): ibt = irsdk.ibt.IBT(tmp_path)
+                if ibt is None: raise RuntimeError("pyirsdk.IBT class not found")
                 try:
-                    a = np.asarray(arr)
-                    if a.size > 0:
-                        data[ch] = a
+                    if hasattr(ibt, "open"): ibt.open()
                 except Exception:
                     pass
-
-        # if none of the usual channels show up, fall back to a bulk read
-        if not data:
-            dump = None
-            read_fn = getattr(ibt, "read", None)
-            if callable(read_fn):
-                for args in [(), (0, -1)]:
-                    try:
-                        dump = read_fn(*args)
-                        if isinstance(dump, dict) and dump:
-                            break
-                    except Exception:
-                        continue
-
-            if isinstance(dump, dict) and dump:
-                keep = {}
-                for k, v in dump.items():
-                    try:
-                        a = np.asarray(v)
-                        if a.ndim == 1 and np.issubdtype(a.dtype, np.number) and a.size > 0:
-                            keep[k] = a
-                    except Exception:
-                        pass
-                if keep:
-                    data = keep
-
-        if not data:
-            raise RuntimeError("No known channels found in IBT.")
-
-        df = pd.DataFrame(data).dropna(how="all")
-
-        # normalize pedals to %
-        for col in ("Throttle","Brake"):
-            if col in df.columns:
+                want = ["Lap","LapDistPct","LapDist","Speed","Throttle","Brake","SteeringWheelAngle","YawRate"]
+                data = {}
+                for ch in want:
+                    arr = None
+                    for getter in ("get","get_channel","get_channel_data_by_name"):
+                        try:
+                            fn = getattr(ibt, getter); maybe = fn(ch)
+                            if maybe is not None: arr = maybe; break
+                        except Exception:
+                            continue
+                    if arr is not None: data[ch] = arr
+                if not data: raise RuntimeError("No known channels found in IBT.")
+                df = pd.DataFrame(data).dropna(how="all")
+                for col in ("Throttle","Brake"):
+                    if col in df.columns and df[col].max() <= 1.5:
+                        df[col] = (df[col] * 100.0).clip(0,100)
+                if "LapDistPct" not in df.columns:
+                    if "LapDist" in df.columns and df["LapDist"].max() > 0:
+                        if "Lap" not in df.columns: df["Lap"] = 1
+                        else: df["Lap"] = df["Lap"].fillna(method="ffill").fillna(1).astype(int)
+                        df["LapDistPct"] = df["LapDist"] / df.groupby("Lap")["LapDist"].transform("max").replace(0,1)
+                    else:
+                        if "Lap" not in df.columns: df["Lap"] = 1
+                        df["_idx"] = df.groupby("Lap").cumcount()
+                        max_idx = df.groupby("Lap")["_idx"].transform("max").replace(0,1)
+                        df["LapDistPct"] = df["_idx"] / max_idx
+                        df.drop(columns=["_idx"], inplace=True)
+            except Exception as e:
+                st.error(f"IBT parse error: {e}")
+            finally:
                 try:
-                    if float(np.nanmax(df[col].values)) <= 1.5:
-                        df[col] = (df[col] * 100.0).clip(0, 100)
-                except Exception:
-                    pass
-
-        # synthesize Lap / LapDistPct if needed so graphs work
-        if "Lap" not in df.columns:
-            df["Lap"] = 1
-        if "LapDistPct" not in df.columns:
-            if "LapDist" in df.columns and pd.to_numeric(df["LapDist"], errors="coerce").fillna(0).max() > 0:
-                df["Lap"] = df["Lap"].fillna(method="ffill").fillna(1).astype(int)
-                max_per_lap = df.groupby("Lap")["LapDist"].transform(lambda s: s.max() if s.max() != 0 else 1.0)
-                df["LapDistPct"] = df["LapDist"] / max_per_lap
-            else:
-                df["_idx"] = df.groupby("Lap").cumcount()
-                max_idx = df.groupby("Lap")["_idx"].transform(lambda s: s.max() if s.max() != 0 else 1)
-                df["LapDistPct"] = df["_idx"] / max_idx
-                df.drop(columns=["_idx"], inplace=True)
-
-    except Exception as e:
-        st.error(f"IBT parse error: {e}")
-    finally:
-        try:
-            if 'ibt' in locals() and hasattr(ibt, "close"):
-                ibt.close()
-        except Exception:
-            pass
-        try:
-            if 'tmp_path' in locals():
-                os.unlink(tmp_path)
-        except Exception:
-            pass
+                    if 'ibt' in locals() and hasattr(ibt, "close"): ibt.close()
+                except Exception: pass
+                try: os.unlink(tmp_path)
+                except Exception: pass
 
     if df is not None:
         df, notes = coerce_min_columns(df)

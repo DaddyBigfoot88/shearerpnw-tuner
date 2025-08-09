@@ -143,13 +143,17 @@ with info_mid:
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".ibt") as tmp:
                     tmp.write(up.read()); tmp_path = tmp.name
                 ibt = None
-                if hasattr(irsdk, "IBT"): ibt = irsdk.IBT(tmp_path)
-                elif hasattr(irsdk, "ibt"): ibt = irsdk.ibt.IBT(tmp_path)
-                if ibt is None: raise RuntimeError("pyirsdk.IBT class not found")
-                try:
-                    if hasattr(ibt, "open"): ibt.open()
-                except Exception:
-                    pass
+           # Always construct with NO args, then open(tmp_path)
+            if hasattr(irsdk, "IBT"): 
+            ibt = irsdk.IBT()
+            elif hasattr(irsdk, "ibt"): 
+            ibt = irsdk.ibt.IBT()
+            else:
+                raise RuntimeError("pyirsdk.IBT class not found")
+
+            # Open using the temp file path
+            if hasattr(ibt, "open"):
+                ibt.open(tmp_path)
                 want = ["Lap","LapDistPct","LapDist","Speed","Throttle","Brake","SteeringWheelAngle","YawRate"]
                 data = {}
                 for ch in want:

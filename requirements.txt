@@ -1,11 +1,10 @@
 streamlit>=1.32
-pandas>=2.1
 plotly
 numpy>=1.25
-pyirsdk>=0.2
 PyYAML
 streamlit-plotly-events
 pillow
 plotly
 requests
-
+pyirsdk==1.3.5
+pandas

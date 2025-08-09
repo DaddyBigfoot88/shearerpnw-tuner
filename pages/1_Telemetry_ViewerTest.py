@@ -157,7 +157,6 @@ with info_mid:
                 want = ["Lap","LapDistPct","LapDist","Speed","Throttle","Brake","SteeringWheelAngle","YawRate"]
                 data = {}
 
-                # prefer names used by pyirsdk variants
                 def _try_get(ch_name):
                     for getter in ("get_channel_data_by_name","get","getVar","get_var","read_channel","get_channel"):
                         fn = getattr(ibt, getter, None)
@@ -170,17 +169,78 @@ with info_mid:
                                 pass
                     return None
 
+                # 1) Try the common channels first
                 for ch in want:
                     arr = _try_get(ch)
                     if arr is not None:
                         try:
                             a = np.asarray(arr)
-                            if a.size > 0:
+                            if a.ndim == 1 and a.size > 0:
                                 data[ch] = a
                         except Exception:
                             pass
 
-                # fallback: read() dump of all channels, keep numeric 1-D
+                # 2) If still empty, enumerate all possible names and read them
+                def _collect_all_names(ibt_obj):
+                    names = set()
+                    # direct attributes that might hold headers
+                    for attr in ["var_headers","varHeaders","variables","vars","channels","channel_headers","channelHeaders"]:
+                        x = getattr(ibt_obj, attr, None)
+                        if x is None: 
+                            continue
+                        try:
+                            if isinstance(x, dict):
+                                for k in x.keys():
+                                    names.add(str(k))
+                            elif isinstance(x, (list, tuple)):
+                                for item in x:
+                                    if isinstance(item, dict):
+                                        for k in ["name","varName","VarName","Name"]:
+                                            if k in item:
+                                                names.add(str(item[k]))
+                                    elif isinstance(item, (str, bytes)):
+                                        names.add(item.decode() if isinstance(item, bytes) else item)
+                        except Exception:
+                            pass
+                    # callable getters that might return header lists
+                    for m in ["get_var_headers","getVarHeaders","list_vars","listVars","list_variables","listVariables","list_channels","listChannels","get_channels","getChannels"]:
+                        fn = getattr(ibt_obj, m, None)
+                        if callable(fn):
+                            try:
+                                got = fn()
+                                if isinstance(got, dict):
+                                    for k in got.keys():
+                                        names.add(str(k))
+                                elif isinstance(got, (list, tuple)):
+                                    for item in got:
+                                        if isinstance(item, dict):
+                                            for k in ["name","varName","VarName","Name"]:
+                                                if k in item:
+                                                    names.add(str(item[k]))
+                                        elif isinstance(item, (str, bytes)):
+                                            names.add(item.decode() if isinstance(item, bytes) else item)
+                            except Exception:
+                                pass
+                    return sorted(names)
+
+                if not data:
+                    all_names = _collect_all_names(ibt)
+                    if all_names:
+                        # Try to read a sane subset (up to 300 channels)
+                        take = all_names[:300]
+                        for nm in take:
+                            arr = _try_get(nm)
+                            if arr is not None:
+                                try:
+                                    a = np.asarray(arr)
+                                    if a.ndim == 1 and a.size > 0 and np.issubdtype(a.dtype, np.number):
+                                        data[nm] = a
+                                except Exception:
+                                    pass
+                        if data:
+                            st.info(f"Loaded {len(data)} channels from IBT headers (no standard names found).")
+
+                # 3) If still empty, try ibt.read() variants
                 if not data:
                     dump = None
                     read_fn = getattr(ibt, "read", None)
@@ -193,21 +253,42 @@ with info_mid:
                             except Exception:
                                 continue
                     if isinstance(dump, dict) and dump:
-                        keep = {}
                         for k, v in dump.items():
                             try:
                                 a = np.asarray(v)
-                                if a.ndim == 1 and np.issubdtype(a.dtype, np.number) and a.size > 0:
-                                    keep[k] = a
+                                if a.ndim == 1 and a.size > 0 and np.issubdtype(a.dtype, np.number):
+                                    data[str(k)] = a
                             except Exception:
                                 pass
-                        if keep:
-                            data = keep
 
                 if not data:
                     raise RuntimeError("No known channels found in IBT.")
 
                 df = pd.DataFrame(data).dropna(how="all")
+
+                # Rename common synonyms to match your expected labels
+                rename_map = {}
+                for col in list(df.columns):
+                    low = col.lower()
+                    if "throttle" in low and "raw" in low and "Throttle" not in df.columns:
+                        rename_map[col] = "Throttle"
+                    elif low == "throttlepos" and "Throttle" not in df.columns:
+                        rename_map[col] = "Throttle"
+                    elif "brake" in low and "raw" in low and "Brake" not in df.columns:
+                        rename_map[col] = "Brake"
+                    elif low in ("steering","steer") and "SteeringWheelAngle" not in df.columns:
+                        rename_map[col] = "SteeringWheelAngle"
+                    elif low in ("speedms","speed_m_s") and "Speed" not in df.columns:
+                        # convert later if you want; leave as-is for now
+                        rename_map[col] = "Speed"
+                    elif low == "lapdistpct" and "LapDistPct" not in df.columns:
+                        rename_map[col] = "LapDistPct"
+                    elif low == "lapdist" and "LapDist" not in df.columns:
+                        rename_map[col] = "LapDist"
+                    elif low == "lapnum" and "Lap" not in df.columns:
+                        rename_map[col] = "Lap"
+                if rename_map:
+                    df.rename(columns=rename_map, inplace=True)
 
                 # normalize pedals to %
                 for col in ("Throttle","Brake"):

@@ -1,5 +1,5 @@
-
-# Telemetry Viewer – Centered + Responsive (no auto-fetch; AI export includes rules/meta/temps/stats)
+# pages/1_Telemetry_Viewer.py
+# Telemetry Viewer – Top Bar + Centered + Responsive + Robust IBT loader
 import io, json, os, pathlib, tempfile, re, mimetypes
 import numpy as np
 import pandas as pd
@@ -9,39 +9,34 @@ import streamlit as st
 
 st.set_page_config(layout="wide")
 
-# === Center and size the app responsively ===
+# === Center + responsive ===
 st.markdown(
     """
     <style>
-      /* Center the main content and control its width */
       .appview-container .main .block-container{
-        max-width: 1200px;    /* wide on desktop */
-        padding-top: 0.5rem;
-        padding-bottom: 2rem;
-        margin-left: auto;
-        margin-right: auto;   /* center */
+        max-width: 1200px;
+        margin-left: auto; margin-right: auto;
+        padding-top: .5rem; padding-bottom: 2rem;
       }
-      /* On small screens keep it centered with comfy side padding */
       @media (max-width: 900px){
         .appview-container .main .block-container{
-          max-width: 95vw;
-          padding-left: 0.75rem;
-          padding-right: 0.75rem;
+          max-width: 95vw; padding-left: .75rem; padding-right: .75rem;
         }
       }
-      /* Center headings + first paragraph (caption) */
       h1, h2, h3 { text-align: center; }
       .stMarkdown p { text-align: center; }
+      /* optional: make the top bar look like one row */
+      .topbar .stColumn > div { padding-top: .25rem; }
     </style>
     """,
     unsafe_allow_html=True
 )
 
-# Title + caption inside a center column so it looks perfectly centered even before CSS loads
+# Title
 t_l, t_m, t_r = st.columns([1,2,1])
 with t_m:
     st.title("Telemetry Viewer")
-    st.caption("All the options are centered. No auto-downloads. Export packs rules + track meta + temps + quick stats.")
+    st.caption("Top bar controls • Centered layout • Robust IBT loader • Export packs rules + track meta + temps + quick stats")
 
 def slug(s: str):
     return re.sub(r'[^a-z0-9_]+', '_', s.lower())
@@ -74,25 +69,37 @@ tracks      = load_tracks()
 tracks_meta = load_json(TRACKS_META_PATH, {})
 coach_rules = load_json(COACH_RULES_PATH, {})
 
-# === TOP: Centered session controls (track, upload, options) ===
-outer_left, mid, outer_right = st.columns([1, 2, 1])
-with mid:
-    st.markdown("### Session Controls")
+# === TOP BAR: Track + Run type + Upload ===
+st.markdown("### ")
+top = st.container()
+with top:
+    st.markdown('<div class="topbar">', unsafe_allow_html=True)
+    c1, c2, c3 = st.columns([2, 1.2, 1.8])
     track_names = sorted(list(tracks.keys())) if tracks else ["Unknown Track"]
     default_idx = track_names.index("Watkins Glen International (Cup)") if "Watkins Glen International (Cup)" in track_names else 0
-    track_pick = st.selectbox("Track", track_names, index=default_idx)
-    track_info = tracks.get(track_pick, {"id":"unknown","corners": ["T1","T2","T3"]})
 
-    up = st.file_uploader("Upload telemetry (.csv or .ibt)", type=["csv","ibt"])
+    st.session_state.track_pick = st.selectbox("Track", track_names, index=default_idx, key="track_pick")
+    st.session_state.run_type   = st.radio("Run type", ["Practice","Qualifying","Race"], index=0, horizontal=True, key="run_type")
+    st.session_state.up_file    = st.file_uploader("Upload telemetry (.csv or .ibt)", type=["csv","ibt"], key="up_file")
+    st.markdown('</div>', unsafe_allow_html=True)
 
-    c1, c2 = st.columns(2)
-    with c1:
+# handy locals
+track_pick = st.session_state.track_pick
+run_type   = st.session_state.run_type
+up         = st.session_state.up_file
+track_info = tracks.get(track_pick, {"id":"unknown","corners": ["T1","T2","T3"]})
+
+# === OPTIONS (centered): chart + table toggles ===
+outer_left, mid, outer_right = st.columns([1, 2, 1])
+with mid:
+    st.markdown("### Options")
+    c1o, c2o = st.columns(2)
+    with c1o:
         show_charts = st.checkbox("Show graphs", value=False)
+    with c2o:
         show_all_table = st.checkbox("Show full raw table", value=False)
-    with c2:
-        run_type = st.radio("Run type", ["Practice","Qualifying","Race"], index=0, horizontal=True)
 
-# Track image (centered)
+# === Track image (centered) ===
 img_left, img_mid, img_right = st.columns([1, 2, 1])
 with img_mid:
     st.subheader("Track")
@@ -102,7 +109,7 @@ with img_mid:
     else:
         st.warning("No cached image for this track. Put an image path in tracks.json and add the file under assets/tracks/.")
 
-# Channels & telemetry loader (centered)
+# === Channels & telemetry loader (centered) ===
 info_left, info_mid, info_right = st.columns([1, 2, 1])
 with info_mid:
     st.subheader("Channels and File info")
@@ -139,52 +146,114 @@ with info_mid:
                 st.error(f"CSV read error: {e}")
         elif suffix == ".ibt":
             try:
-                import irsdk, tempfile
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".ibt") as tmp:
-                    tmp.write(up.read()); tmp_path = tmp.name
-                ibt = None
-                if hasattr(irsdk, "IBT"): ibt = irsdk.IBT(tmp_path)
-                elif hasattr(irsdk, "ibt"): ibt = irsdk.ibt.IBT(tmp_path)
-                if ibt is None: raise RuntimeError("pyirsdk.IBT class not found")
+                # Robust pyirsdk handler
                 try:
-                    if hasattr(ibt, "open"): ibt.open()
+                    import irsdk
                 except Exception:
-                    pass
-                want = ["Lap","LapDistPct","LapDist","Speed","Throttle","Brake","SteeringWheelAngle","YawRate"]
-                data = {}
-                for ch in want:
-                    arr = None
-                    for getter in ("get","get_channel","get_channel_data_by_name"):
+                    st.error("pyirsdk/irsdk not installed. Add 'pyirsdk' to requirements.txt.")
+                    irsdk = None
+
+                if irsdk is not None:
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".ibt") as tmp:
+                        tmp.write(up.read()); tmp_path = tmp.name
+
+                    ibt = None
+                    opened = False
+                    variant = "unknown"
+
+                    try:
+                        # Variant A: irsdk.IBT(path)
+                        if hasattr(irsdk, "IBT"):
+                            try:
+                                ibt = irsdk.IBT(tmp_path); variant = "irsdk.IBT(path)"
+                            except TypeError:
+                                # Variant A2: irsdk.IBT() then open(path)
+                                ibt = irsdk.IBT(); variant = "irsdk.IBT().open(path)"
+                                try:
+                                    ibt.open(tmp_path); opened = True
+                                except TypeError:
+                                    pass
+
+                        # Variant B: irsdk.ibt.IBT(...)
+                        if ibt is None and hasattr(irsdk, "ibt"):
+                            try:
+                                ibt = irsdk.ibt.IBT(tmp_path); variant = "irsdk.ibt.IBT(path)"
+                            except TypeError:
+                                ibt = irsdk.ibt.IBT(); variant = "irsdk.ibt.IBT().open(path)"
+                                try:
+                                    ibt.open(tmp_path); opened = True
+                                except TypeError:
+                                    pass
+
+                        if ibt is None:
+                            raise RuntimeError("Could not create IBT reader from irsdk")
+
+                        # Open if not yet opened
+                        if not opened and hasattr(ibt, "open"):
+                            try:
+                                ibt.open(); opened = True
+                            except TypeError:
+                                ibt.open(tmp_path); opened = True
+
+                        def read_channel(name):
+                            # Try several common getters across forks
+                            for m in ("get_channel_data_by_name","get","getVar","get_var","read_channel"):
+                                fn = getattr(ibt, m, None)
+                                if callable(fn):
+                                    try:
+                                        val = fn(name)
+                                        if val is not None:
+                                            return val
+                                    except Exception:
+                                        continue
+                            return None
+
+                        want = ["Lap","LapDistPct","LapDist","Speed","Throttle","Brake","SteeringWheelAngle","YawRate"]
+                        data = {}
+                        for ch in want:
+                            arr = read_channel(ch)
+                            if arr is not None and len(arr) > 0:
+                                try:
+                                    data[ch] = np.asarray(arr)
+                                except Exception:
+                                    pass
+
+                        if not data:
+                            raise RuntimeError(f"No known channels found in IBT (tried {', '.join(want)} via {variant})")
+
+                        df = pd.DataFrame(data).dropna(how="all")
+
+                        # normalize
+                        for col in ("Throttle","Brake"):
+                            if col in df.columns and df[col].max() <= 1.5:
+                                df[col] = (df[col] * 100.0).clip(0,100)
+                        if "LapDistPct" not in df.columns:
+                            if "LapDist" in df.columns and df["LapDist"].max() > 0:
+                                if "Lap" not in df.columns: df["Lap"] = 1
+                                else: df["Lap"] = df["Lap"].fillna(method="ffill").fillna(1).astype(int)
+                                df["LapDistPct"] = df["LapDist"] / df.groupby("Lap")["LapDist"].transform("max").replace(0,1)
+                            else:
+                                if "Lap" not in df.columns: df["Lap"] = 1
+                                df["_idx"] = df.groupby("Lap").cumcount()
+                                max_idx = df.groupby("Lap")["_idx"].transform("max").replace(0,1)
+                                df["LapDistPct"] = df["_idx"] / max_idx
+                                df.drop(columns=["_idx"], inplace=True)
+
+                    except Exception as e:
+                        st.error(f"IBT parse error: {e}")
+                    finally:
                         try:
-                            fn = getattr(ibt, getter); maybe = fn(ch)
-                            if maybe is not None: arr = maybe; break
+                            if 'ibt' in locals() and ibt is not None and hasattr(ibt, 'close'):
+                                ibt.close()
                         except Exception:
-                            continue
-                    if arr is not None: data[ch] = arr
-                if not data: raise RuntimeError("No known channels found in IBT.")
-                df = pd.DataFrame(data).dropna(how="all")
-                for col in ("Throttle","Brake"):
-                    if col in df.columns and df[col].max() <= 1.5:
-                        df[col] = (df[col] * 100.0).clip(0,100)
-                if "LapDistPct" not in df.columns:
-                    if "LapDist" in df.columns and df["LapDist"].max() > 0:
-                        if "Lap" not in df.columns: df["Lap"] = 1
-                        else: df["Lap"] = df["Lap"].fillna(method="ffill").fillna(1).astype(int)
-                        df["LapDistPct"] = df["LapDist"] / df.groupby("Lap")["LapDist"].transform("max").replace(0,1)
-                    else:
-                        if "Lap" not in df.columns: df["Lap"] = 1
-                        df["_idx"] = df.groupby("Lap").cumcount()
-                        max_idx = df.groupby("Lap")["_idx"].transform("max").replace(0,1)
-                        df["LapDistPct"] = df["_idx"] / max_idx
-                        df.drop(columns=["_idx"], inplace=True)
+                            pass
+                        try:
+                            os.unlink(tmp_path)
+                        except Exception:
+                            pass
+
             except Exception as e:
                 st.error(f"IBT parse error: {e}")
-            finally:
-                try:
-                    if 'ibt' in locals() and hasattr(ibt, "close"): ibt.close()
-                except Exception: pass
-                try: os.unlink(tmp_path)
-                except Exception: pass
 
     if df is not None:
         df, notes = coerce_min_columns(df)
@@ -206,7 +275,7 @@ def basic_channel_stats(df, cols):
             continue
     return out
 
-# Graphs (controls centered; charts full width)
+# === Graphs (controls centered; charts full width) ===
 g_left, g_mid, g_right = st.columns([1, 2, 1])
 with g_mid:
     st.markdown("---")
@@ -223,26 +292,19 @@ with g_mid:
             selected = st.multiselect("Channels to plot", numeric_cols, default=default_pick)
             mode = st.radio("X axis", ["LapDistPct","Index"], index=0, horizontal=True)
             bylap = st.checkbox("Split by Lap", value=True)
-            palette = (px.colors.qualitative.Safe + px.colors.qualitative.Set2 + px.colors.qualitative.Plotly)
-            color_cycle = palette * 5
-            trace_idx = 0
-            if selected:
-                if bylap and "Lap" in df.columns:
-                    laps = sorted(pd.unique(df["Lap"]).tolist())
-                    chosen_laps = st.multiselect("Which laps?", laps, default=laps[:min(3,len(laps))])
-                else:
-                    chosen_laps = [None]
-                st.markdown("")
+            if bylap and "Lap" in df.columns:
+                laps = sorted(pd.unique(df["Lap"]).tolist())
+                chosen_laps = st.multiselect("Which laps?", laps, default=laps[:min(3,len(laps))])
+            else:
+                chosen_laps = [None]
 
 if show_charts and 'df' in locals() and df is not None:
     if 'selected' in locals() and selected:
         palette = (px.colors.qualitative.Safe + px.colors.qualitative.Set2 + px.colors.qualitative.Plotly)
         color_cycle = palette * 5
         trace_idx = 0
-        if 'chosen_laps' not in locals():
-            chosen_laps = [None]
         for ch in selected:
-            st.markdown("**{}**".format(ch))
+            st.markdown(f"**{ch}**")
             fig = go.Figure()
             if chosen_laps == [None]:
                 x = df["LapDistPct"] if mode=="LapDistPct" and "LapDistPct" in df.columns else np.arange(len(df))
@@ -254,7 +316,7 @@ if show_charts and 'df' in locals() and df is not None:
                 for L in chosen_laps:
                     dlap = df[df["Lap"]==L]
                     x = dlap["LapDistPct"] if mode=="LapDistPct" and "LapDistPct" in dlap.columns else np.arange(len(dlap))
-                    fig.add_trace(go.Scatter(x=x, y=dlap[ch], mode="lines", name="Lap {}".format(L),
+                    fig.add_trace(go.Scatter(x=x, y=dlap[ch], mode="lines", name=f"Lap {L}",
                                              line=dict(width=2.5, color=color_cycle[trace_idx % len(color_cycle)]),
                                              opacity=0.95))
                     trace_idx += 1
@@ -263,7 +325,7 @@ if show_charts and 'df' in locals() and df is not None:
                               hovermode="x unified", height=300)
             st.plotly_chart(fig, use_container_width=True)
 
-# Full table (centered control; table wide)
+# === Full table (centered control; table wide) ===
 tbl_left, tbl_mid, tbl_right = st.columns([1, 2, 1])
 with tbl_mid:
     if show_all_table and 'df' in locals() and df is not None:
@@ -271,7 +333,7 @@ with tbl_mid:
         st.subheader("All data table (first 1,000 rows)")
         st.dataframe(df.head(1000), use_container_width=True)
 
-# Corner feedback (centered wrapper; inner 3 cols for corners)
+# === Corner feedback (centered wrapper; inner 3 cols) ===
 fb_left, fb_mid, fb_right = st.columns([1, 2, 1])
 with fb_mid:
     st.markdown("---")
@@ -292,15 +354,15 @@ with fb_mid:
     cols = st.columns(3)
     for i, c in enumerate(corner_labels):
         with cols[i % 3]:
-            st.markdown("**{}**".format(c))
-            feels = st.selectbox("{} feel".format(c), DEFAULT_FEELINGS, index=0, key="feel_{}".format(slug(c)))
-            severity = st.slider("{} severity".format(c), 0, 10, st.session_state.driver_feedback[c].get("severity",0), key="sev_{}".format(slug(c)))
-            note = st.text_input("{} note (optional)".format(c), value=st.session_state.driver_feedback[c].get("note",""), key="note_{}".format(slug(c)))
+            st.markdown(f"**{c}**")
+            feels = st.selectbox(f"{c} feel", DEFAULT_FEELINGS, index=0, key=f"feel_{slug(c)}")
+            severity = st.slider(f"{c} severity", 0, 10, st.session_state.driver_feedback[c].get("severity",0), key=f"sev_{slug(c)}")
+            note = st.text_input(f"{c} note (optional)", value=st.session_state.driver_feedback[c].get("note",""), key=f"note_{slug(c)}")
             st.session_state.driver_feedback[c] = {"feels": feels, "severity": int(severity), "note": note}
 
     st.success("Feedback saved for this track.")
 
-# Setup entry/upload (centered)
+# === Setup entry/upload (centered) ===
 su_left, su_mid, su_right = st.columns([1, 2, 1])
 with su_mid:
     st.markdown("---")
@@ -340,7 +402,7 @@ with su_mid:
         except Exception as e:
             st.error(f"Setup upload error: {e}")
 
-# Temps (centered)
+# === Temps (centered) ===
 t_left, t_mid, t_right = st.columns([1, 2, 1])
 with t_mid:
     st.markdown("---")
@@ -352,7 +414,7 @@ with t_mid:
     with c2t:
         current_temp = st.number_input("Current Track Temperature (°F)", 40, 150, int(base_default))
 
-# Export (centered)
+# === Export (centered) ===
 ex_left, ex_mid, ex_right = st.columns([1, 2, 1])
 with ex_mid:
     st.markdown("---")
@@ -423,6 +485,15 @@ track: {{TRACK_NAME}}
 run_type: {{RUN_TYPE}}
 baseline_setup_temp_f: {{BASE_TEMP}}
 current_track_temp_f: {{CUR_TEMP}}
+
+corner_labels: {{CORNER_LABELS_JSON}}
+
+OK—here is the data:
+
+corner_feedback_json = 
+```json
+{{CORNER_FEEDBACK_JSON}}
+
 
 corner_labels: {{CORNER_LABELS_JSON}}
 
